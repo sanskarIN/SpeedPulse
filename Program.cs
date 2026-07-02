@@ -1,3 +1,7 @@
+// Program.cs
+// -----------------------------------------------------------------------------------
+// Sanskar. The open source internet speed checker madded and powered by the Sanskar.
+// -----------------------------------------------------------------------------------
 using System.IO.Pipelines;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,14 +28,14 @@ app.MapGet("/api/down", async (HttpContext context) =>
     // Provide a file to download for speed testing.
     var bytesQuery = context.Request.Query["bytes"];
     int bytes = 25 * 1024 * 1024; // Default 25 MB
-    
+
     if (int.TryParse(bytesQuery, out int requestedBytes))
     {
         bytes = requestedBytes;
     }
 
     context.Response.ContentType = "application/octet-stream";
-    
+
     // We send a continuous stream of random bytes.
     // Instead of allocating a huge array, we allocate a 1MB buffer and loop.
     // A larger buffer reduces the async overhead and significantly increases throughput.
@@ -43,7 +47,7 @@ app.MapGet("/api/down", async (HttpContext context) =>
     {
         // If client disconnected, stop
         if (context.RequestAborted.IsCancellationRequested) break;
-        
+
         int toSend = Math.Min(buffer.Length, bytes - sent);
         await context.Response.BodyWriter.WriteAsync(new ReadOnlyMemory<byte>(buffer, 0, toSend), context.RequestAborted);
         sent += toSend;
@@ -56,7 +60,7 @@ app.MapPost("/api/up", async (HttpContext context) =>
     var buffer = new byte[64 * 1024];
     long totalRead = 0;
     int read;
-    
+
     while ((read = await context.Request.Body.ReadAsync(buffer, 0, buffer.Length)) > 0)
     {
         totalRead += read;
@@ -69,3 +73,4 @@ app.MapPost("/api/up", async (HttpContext context) =>
 app.MapFallbackToFile("index.html");
 
 app.Run();
+// The code ends here.
