@@ -1,3 +1,5 @@
+<!-- The open source internet speed checker. -->
+<!-- 404 Page -->
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 
@@ -104,7 +106,10 @@
         /* Flash Screen (Splash) */
         #global-splash-screen {
             position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             background: #020617;
             z-index: 999999;
             display: flex;
@@ -113,20 +118,35 @@
             align-items: center;
             transition: opacity 0.8s ease-out, visibility 0.8s ease-out;
         }
+
         .splash-logo {
             width: 350px;
             animation: pulse-glow 2s infinite;
         }
+
         @keyframes pulse-glow {
-            0% { filter: drop-shadow(0 0 10px rgba(56,189,248,0.5)); transform: scale(1); }
-            50% { filter: drop-shadow(0 0 30px rgba(236,72,153,0.8)); transform: scale(1.05); }
-            100% { filter: drop-shadow(0 0 10px rgba(56,189,248,0.5)); transform: scale(1); }
+            0% {
+                filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
+                transform: scale(1);
+            }
+
+            50% {
+                filter: drop-shadow(0 0 30px rgba(236, 72, 153, 0.8));
+                transform: scale(1.05);
+            }
+
+            100% {
+                filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
+                transform: scale(1);
+            }
         }
-        
+
         /* Scroll Progress Bar */
         #scroll-progress-bar {
             position: fixed;
-            top: 0; left: 0; height: 4px;
+            top: 0;
+            left: 0;
+            height: 4px;
             background: linear-gradient(90deg, #3b82f6, #ec4899);
             z-index: 999998;
             width: 0%;
@@ -143,16 +163,25 @@
             padding: 0.5rem 0;
             min-width: 200px;
             z-index: 9999999;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
             display: none;
             flex-direction: column;
             transform-origin: top left;
             animation: contextFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
+
         @keyframes contextFadeIn {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
         }
+
         .context-menu-item {
             padding: 0.75rem 1.25rem;
             color: #e2e8f0;
@@ -164,21 +193,24 @@
             gap: 10px;
             transition: all 0.2s;
         }
+
         .context-menu-item:hover {
             background: rgba(56, 189, 248, 0.15);
             color: #38bdf8;
             padding-left: 1.5rem;
         }
+
         .context-menu-divider {
             height: 1px;
-            background: rgba(255,255,255,0.1);
+            background: rgba(255, 255, 255, 0.1);
             margin: 0.25rem 0;
         }
 
         /* Cursor Glow Trail */
         .cursor-trail {
             position: fixed;
-            width: 10px; height: 10px;
+            width: 10px;
+            height: 10px;
             background: #ec4899;
             border-radius: 50%;
             pointer-events: none;
@@ -195,31 +227,46 @@
 
     <!-- Global UI Features -->
     <div id="scroll-progress-bar"></div>
-    
+
     <div id="global-splash-screen">
         <img src="Sanskar Developer.svg" alt="Sanskar Developer Logo" class="splash-logo">
-        <div style="margin-top: 2rem; color: #cbd5e1; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; letter-spacing: 2px;">
+        <div
+            style="margin-top: 2rem; color: #cbd5e1; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; letter-spacing: 2px;">
             INITIALIZING CORE ENGINES...
         </div>
         <!-- Progress Bar inside splash -->
-        <div style="width: 250px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-top: 1rem; overflow: hidden;">
-            <div id="splash-progress" style="width: 0%; height: 100%; background: #38bdf8; transition: width 0.1s linear;"></div>
+        <div
+            style="width: 250px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-top: 1rem; overflow: hidden;">
+            <div id="splash-progress"
+                style="width: 0%; height: 100%; background: #38bdf8; transition: width 0.1s linear;"></div>
         </div>
     </div>
 
     <div id="custom-context-menu">
         <div class="context-menu-item" onclick="window.location.href='index.html'">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Run Speed Test
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            </svg> Run Speed Test
         </div>
         <div class="context-menu-item" onclick="window.location.href='developer.html'">
-            <svg width="16" height="16" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 9.36l-1.63 1.63a1 1 0 0 0-.2.27l-2.43 4.86a1 1 0 0 1-1.8 0L5.3 16.89a1 1 0 0 1-.2-.27l-1.63-1.63a6 6 0 0 1 9.36-7.94l3.77-3.77z"/></svg> Developer Labs
+            <svg width="16" height="16" fill="none" stroke="#f59e0b" stroke-width="2">
+                <path
+                    d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 9.36l-1.63 1.63a1 1 0 0 0-.2.27l-2.43 4.86a1 1 0 0 1-1.8 0L5.3 16.89a1 1 0 0 1-.2-.27l-1.63-1.63a6 6 0 0 1 9.36-7.94l3.77-3.77z" />
+            </svg> Developer Labs
         </div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="navigator.clipboard.writeText(window.location.href); alert('URL Copied!');">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy Page URL
+        <div class="context-menu-item"
+            onclick="navigator.clipboard.writeText(window.location.href); alert('URL Copied!');">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg> Copy Page URL
         </div>
         <div class="context-menu-item" onclick="window.location.reload(true)">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Force Reload
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+            </svg> Force Reload
         </div>
     </div>
 
@@ -232,7 +279,7 @@
             let w = 0;
             const interval = setInterval(() => {
                 w += Math.random() * 15 + 5;
-                if(w >= 100) {
+                if (w >= 100) {
                     w = 100;
                     clearInterval(interval);
                     setTimeout(() => {
@@ -257,15 +304,15 @@
         document.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             contextMenu.style.display = 'flex';
-            
+
             // Boundary detection
             let x = e.clientX;
             let y = e.clientY;
             const menuWidth = contextMenu.offsetWidth;
             const menuHeight = contextMenu.offsetHeight;
-            if(x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 10;
-            if(y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 10;
-            
+            if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 10;
+            if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 10;
+
             contextMenu.style.left = x + 'px';
             contextMenu.style.top = y + 'px';
         });
@@ -287,7 +334,7 @@
                 trail.style.background = Math.random() > 0.5 ? '#ec4899' : '#38bdf8';
                 trail.style.boxShadow = '0 0 15px ' + trail.style.background;
                 document.body.appendChild(trail);
-                
+
                 // Animate and destroy
                 setTimeout(() => {
                     trail.style.opacity = '0';
@@ -335,15 +382,14 @@
                                 </path>
                             </svg>
                         </a>
-                        <a href="https://x.com/@SanskarCode" target="_blank" aria-label="X (Twitter)">
+                        <a href="https://x.com/Sanskar_in" target="_blank" aria-label="X (Twitter)">
                             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2"
                                 fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M4 4l11.733 16h4.267l-11.733 -16z"></path>
                                 <path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path>
                             </svg>
                         </a>
-                        <a href="https://www.linkedin.com/in/sanskar-in/" target="_blank"
-                            aria-label="LinkedIn">
+                        <a href="https://www.linkedin.com/in/sanskar-in/" target="_blank" aria-label="LinkedIn">
                             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2"
                                 fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path
@@ -364,7 +410,7 @@
                 </div>
                 <div class="footer-contact">
                     <h4>Contact</h4>
-                    <a href="tel:+919795753292">📞 +91 9795753292</a>
+                    <!-- <a href="tel:+919795753292">📞 +91 9795753292</a> -->
                     <a href="mailto:sanskaryadavfrom2012to2026@gmail.com">✉️ sanskaryadavfrom2012to2026@gmail.com</a>
                     <a href="mailto:supportramsandesh@gmail.com">✉️ supportramsandesh@gmail.com</a>
                     <a href="mailto:sanskaryadavfromghosimau2026-27@outlook.com">✉️
@@ -378,9 +424,11 @@
                     <a href="terms.html">Terms & Conditions</a>
                 </div>
             </div>
-            
+
             <div style="text-align: center; margin-top: 2rem;">
-                <img src="Sanskar Developer.svg" alt="Built by Sanskar Developer" style="max-width: 250px; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5)); transition: transform 0.3s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <img src="Sanskar Developer.svg" alt="Built by Sanskar Developer"
+                    style="max-width: 250px; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5)); transition: transform 0.3s;"
+                    onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
             </div>
 
             <div class="footer-bottom">
@@ -423,3 +471,4 @@
 </body>
 
 </html>
+<!-- The code ends here. -->
