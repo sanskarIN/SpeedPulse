@@ -27,23 +27,22 @@ export async function runPingTest(server = 'auto', onProgress) {
     const pings = [];
     let failed = 0;
     for (let i = 0; i < iterations; i++) {
-        if (controller.signal.aborted)
-            break;
+        if (controller.signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
         const start = performance.now();
         try {
             // Cache buster to avoid cached responses
-            await fetch(`${target}?bytes=0&cb=${Date.now()}_${i}`, {
-                method: 'HEAD',
+            const response = await fetch(`${target}?bytes=0&cb=${Date.now()}_${i}`, {
+                method: "GET",
                 signal: controller.signal,
                 cache: 'no-store'
             });
-            const duration = performance.now() - start;
+            if (!response.ok) throw new Error(`HTTP ${response.status} during latency probe`);
+        const duration = performance.now() - start;
             pings.push(duration);
             onProgress(duration);
         }
         catch (e) {
-            if (e.name === 'AbortError')
-                break;
+            if (e.name === "AbortError") throw e;
             failed++;
         }
     }
@@ -88,8 +87,7 @@ export async function runDownloadTest(server = 'auto', onProgress) {
         }
     }
     catch (e) {
-        if (e.name !== 'AbortError')
-            throw e;
+        throw e;
     }
     const totalDurationSec = (performance.now() - startTime) / 1000;
     return totalDurationSec > 0 ? (loadedBytes * 8) / (1024 * 1024) / totalDurationSec : 0;
@@ -117,12 +115,13 @@ export async function runUploadTest(server = 'auto', onProgress) {
         try {
             // Using a simple POST with Blob of text/plain type
             // This prevents the browser from sending a CORS preflight OPTIONS request
-            await fetch(target, {
+            const response = await fetch(target, {
                 method: 'POST',
                 body: blob,
-                mode: 'no-cors',
+                mode: "cors",
                 signal: controller.signal
             });
+            if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
             clearInterval(fakeProgressTimer);
             const durationSec = (performance.now() - startTime) / 1000;
             const finalMbps = (payloadSize * 8) / (1024 * 1024) / durationSec;
@@ -131,14 +130,7 @@ export async function runUploadTest(server = 'auto', onProgress) {
         }
         catch (e) {
             clearInterval(fakeProgressTimer);
-            if (e.name === 'AbortError') {
-                resolve(0);
-            }
-            else {
-                console.error("Upload failed, attempting fallback...", e);
-                // Fallback: resolve with a zero but don't crash the whole test
-                resolve(0);
-            }
+            reject(e);
         }
     });
 }
