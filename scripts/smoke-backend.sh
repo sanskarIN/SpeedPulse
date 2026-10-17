@@ -43,4 +43,16 @@ printf 'speedpulse-upload' | curl --silent --fail -X POST --data-binary @- \
 status=$(head -c 9437184 /dev/zero | curl --silent -o /dev/null \
   -w '%{http_code}' -X POST --data-binary @- "$host/api/up" || true)
 test "$status" = 413 || { echo "Expected 413 for oversized upload, got: $status"; exit 1; }
+# Verify the API explicitly prevents unrelated origins from using permissive CORS.
+headers=$(curl --silent --head -H 'Origin: https://example.invalid' "$host/api/down?bytes=0")
+if printf '%s' "$headers" | grep -qi '^access-control-allow-origin:'; then
+  echo 'Unexpected cross-origin allow header'; exit 1
+fi
+# Enough requests to exceed the server's 60/minute rate limit.
+limited=0
+for attempt in $(seq 1 65); do
+  code=$(curl --silent -o /dev/null -w '%{http_code}' "$host/api/down?bytes=0")
+  if [ "$code" = 429 ]; then limited=1; break; fi
+done
+test "$limited" = 1 || { echo 'Rate limiting did not activate'; exit 1; }
 echo 'SpeedPulse ASP.NET smoke tests passed.'
