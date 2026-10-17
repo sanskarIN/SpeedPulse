@@ -27,6 +27,7 @@ jobs:
         run: |
           node --check main-files/bundle.js
           node --check main-files/bundle-dev.js
+          node --check main-files/dev-diagnostics.js
           node --check main-files/backend-status.js
           node --check main-files/sw.js
 
