@@ -32,3 +32,21 @@ test('legacy diagnostics console escapes messages', () => {
   assert.ok(src.includes('key.startsWith("speedpulse-")'));
   assert.ok(!src.includes('div.innerHTML'));
 });
+
+test('Developer Labs ships without its former megabyte-scale placeholder log archive', () => {
+  const html = read('main-files/developer.html');
+  assert.match(html, /src="bundle-dev\.js"/);
+  assert.ok(Buffer.byteLength(html, 'utf8') < 250000);
+  assert.doesNotMatch(html, /\[SEQ-\d+\]/);
+});
+
+test('legacy controls feed isolated previews rather than device changes', () => {
+  const js = read('src/dev-diagnostics.ts');
+  for (const id of ['dev-inject-jitter', 'dev-packet-loss',
+    'dev-force-offline', 'dev-throttle-enabled', 'dev-wss-drops',
+    'dev-dom-observer', 'dev-spoof-gps']) {
+    assert.ok(js.includes(id), id + ' should be connected');
+  }
+  assert.match(js, /simulatedOffline: offline/);
+  assert.match(js, /wireLegacySimulators\(\)/);
+});
