@@ -518,10 +518,10 @@
           setGaugePhase("Ping Test");
           gaugeSpeed.textContent = "...";
           const { ping, jitter, packetLoss } = await runPingTest(server, (p) => {
-            valPing.textContent = Math.round().toString();
+            valPing.textContent = Math.round(p).toString();
           });
-          valPing.textContent = Math.round().toString();
-          valJitter.textContent = Math.round().toString();
+          valPing.textContent = Math.round(ping).toString();
+          valJitter.textContent = Math.round(jitter).toString();
           finalResult.ping = ping;
           finalResult.jitter = jitter;
           setGaugePhase("Download Test");
@@ -605,10 +605,10 @@
         } catch (e) {
           console.warn("Primary ISP fetch failed, trying fallback...", e);
           try {
-            const res = await fetch("http://ip-api.com/json/");
+            const res = await fetch("https://ipwho.is/");
             const data = await res.json();
-            document.getElementById("info-isp").textContent = data.isp || "--";
-            document.getElementById("info-ip").textContent = data.query || "--";
+            document.getElementById("info-isp").textContent = data.connection?.isp || "--";
+            document.getElementById("info-ip").textContent = data.ip || "--";
             document.getElementById("info-loc").textContent = `${data.city}, ${data.country}`;
           } catch (e2) {
             document.getElementById("info-isp").textContent = "Unknown ISP";
@@ -887,26 +887,26 @@
       });
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
-          navigator.serviceWorker.register("sw.js?v=5.0").catch(console.error);
+          navigator.serviceWorker.register("sw.js?v=6.0").catch(console.error);
         });
       }
       document.addEventListener("DOMContentLoaded", () => {
-        const CURRENT_VERSION = "5.0";
+        const CURRENT_VERSION = '6.0';
         const lastVersion = localStorage.getItem("app_version");
         if (lastVersion !== CURRENT_VERSION) {
           console.log(`SpeedPulse: Version update detected (${lastVersion} -> ${CURRENT_VERSION}). Clearing caches & Service Workers...`);
           if ("serviceWorker" in navigator) {
             navigator.serviceWorker.getRegistrations().then((registrations) => {
               for (let registration of registrations) {
-                registration.unregister();
-              }
+              if (registration.scope === new URL('./', window.location.href).href) registration.unregister();
+            }
             });
           }
           if ("caches" in window) {
             caches.keys().then((names) => {
               for (let name of names) {
-                caches.delete(name);
-              }
+              if (name.startsWith('speedpulse-')) caches.delete(name);
+            }
             });
           }
           localStorage.setItem("app_version", CURRENT_VERSION);
