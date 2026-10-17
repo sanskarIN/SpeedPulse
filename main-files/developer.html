@@ -475,24 +475,24 @@
                                     d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
                             </svg> Network Pipeline Constraints</h3>
                         <div class="setting-row">
-                            <span>Enable Artificial Throttling</span>
+                            <span>Simulate Bandwidth Caps (preview only)</span>
                             <label class="switch"><input type="checkbox" id="dev-throttle-enabled"><span
                                     class="slider"></span></label>
                         </div>
                         <div class="setting-row">
-                            <span>Max Download Cap (Mbps)</span>
+                            <span>Mock Download Cap (Mbps)</span>
                             <input type="number" id="dev-throttle-down" value="100" min="1">
                         </div>
                         <div class="setting-row">
-                            <span>Max Upload Cap (Mbps)</span>
+                            <span>Mock Upload Cap (Mbps)</span>
                             <input type="number" id="dev-throttle-up" value="50" min="1">
                         </div>
                         <div class="setting-row">
-                            <span>Inject Network Jitter (ms)</span>
+                            <span>Simulated HTTP Jitter (ms)</span>
                             <input type="number" id="dev-inject-jitter" value="0" min="0">
                         </div>
                         <div class="setting-row">
-                            <span>Simulate Packet Loss (%)</span>
+                            <span>Simulated HTTP Failure (%)</span>
                             <input type="number" id="dev-packet-loss" value="0" min="0" max="100">
                         </div>
                     </div>
@@ -531,8 +531,8 @@
                             <button class="action-btn" id="dev-stress-confetti">Spawn 10k Particles</button>
                         </div>
                         <div class="setting-row">
-                            <span>Force WebGL Context Loss</span>
-                            <button class="action-btn danger-btn" id="dev-crash-webgl">Trigger Crash</button>
+                            <span>Clear 2D Confetti Canvas</span>
+                            <button class="action-btn danger-btn" id="dev-crash-webgl">Clear Canvas</button>
                         </div>
                     </div>
 
@@ -586,7 +586,7 @@
                         </div>
                         <div class="setting-row">
                             <span>Simulate CDN Edge Node Collapse</span>
-                            <button class="action-btn danger-btn" id="dev-nuke-cdn">Destroy Edge Nodes</button>
+                            <button class="action-btn danger-btn" id="dev-nuke-cdn">Preview Edge Outage</button>
                         </div>
                     </div>
 
@@ -654,9 +654,9 @@
                                 <circle cx="12" cy="12" r="10" />
                                 <line x1="12" y1="8" x2="12" y2="12" />
                                 <line x1="12" y1="16" x2="12.01" y2="16" />
-                            </svg> Sensor & Location Spoofing</h3>
+                            </svg> Sensor & Location Preview</h3>
                         <div class="setting-row">
-                            <span>Enable GPS Spoofing</span>
+                            <span>Mock GPS Coordinates (preview only)</span>
                             <label class="switch"><input type="checkbox" id="dev-spoof-gps"><span
                                     class="slider"></span></label>
                         </div>
@@ -669,7 +669,7 @@
                             <input type="text" id="dev-gps-lng" value="139.6917" placeholder="e.g. 139.6917">
                         </div>
                         <div class="setting-row">
-                            <span>Force Device Offline Mode</span>
+                            <span>Simulate Offline (preview only)</span>
                             <label class="switch"><input type="checkbox" id="dev-force-offline"><span
                                     class="slider"></span></label>
                         </div>
@@ -697,7 +697,7 @@
                         <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
                             <button class="action-btn danger-btn" id="dev-trigger-memory-leak">Simulate Memory Leak
                                 Warning</button>
-                            <button class="action-btn" id="dev-run-benchmark">Run CPU Crypto Benchmark</button>
+                            <button class="action-btn" id="dev-run-benchmark">Run CPU Loop Benchmark</button>
                         </div>
                     </div>
 
