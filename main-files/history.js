@@ -43,10 +43,10 @@ export function exportToCSV() {
     const headers = ['Date', 'Download (Mbps)', 'Upload (Mbps)', 'Ping (ms)', 'Jitter (ms)', 'ISP'];
     const rows = history.map(item => [
         new Date(item.date).toLocaleString(),
-        item.download?.toFixed(2) || '0',
-        item.upload?.toFixed(2) || '0',
-        Math.round(item.ping || 0),
-        Math.round(item.jitter || 0),
+        Number.isFinite(item.download) ? item.download.toFixed(2) : '',
+        Number.isFinite(item.upload) ? item.upload.toFixed(2) : '',
+        Number.isFinite(item.ping) ? Math.round(item.ping) : '',
+        Number.isFinite(item.jitter) ? Math.round(item.jitter) : '',
         `"${item.isp || 'Unknown'}"` // wrap in quotes to handle commas
     ]);
     const csvContent = [
