@@ -1,74 +1,49 @@
-const CACHE_NAME = 'speedpulse-v5';
-const urlsToCache = [
+/* SpeedPulse static-app service worker. No speed-test responses are cached. */
+const CACHE_NAME = 'speedpulse-static-v6';
+const SHELL = [
   './',
   './index.html',
   './styles.css',
-  './script.js',
-  './speedtest.js',
-  './utils.js',
-  './history.js',
+  './bundle.js',
   './manifest.json',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap',
-  'https://cdn.jsdelivr.net/npm/chart.js',
-  'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
+  './favicon.png'
 ];
-
 self.addEventListener('install', event => {
-  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return Promise.all(
-        urlsToCache.map(url => {
-          return fetch(new Request(url, { cache: 'reload' }))
-            .then(response => {
-              if (!response.ok) {
-                throw new Error(`Request for ${url} failed with status ${response.status}`);
-              }
-              return cache.put(url, response);
-            })
-            .catch(err => {
-              console.warn(`Failed to cache ${url}:`, err);
-              // Fallback to standard fetch if cache: reload is rejected
-              return fetch(url).then(res => cache.put(url, res)).catch(e => console.error(e));
-            });
-        })
-      );
-    })
+    caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL))
+      .then(() => self.skipWaiting())
   );
 });
-
-self.addEventListener('fetch', event => {
-  // Only cache UI assets, bypass caching for speedtest API requests
-  if (event.request.url.includes('speed.cloudflare.com') || 
-      event.request.url.includes('ipapi.co') || 
-      event.request.url.includes('httpbin.org') || 
-      event.request.url.includes('ip-api.com')) {
-      return;
-  }
-  
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      })
-  );
-});
-
 self.addEventListener('activate', event => {
-  self.clients.claim();
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.keys()
+      .then(keys => Promise.all(keys
+        .filter(key => key.startsWith('speedpulse-') && key !== CACHE_NAME)
+        .map(key => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
+});
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.pathname.includes('/api/')) return;
+  if (!url.pathname.startsWith(new URL(self.registration.scope).pathname)) return;
+
+  if (request.mode === 'navigate') {
+    // Prefer current HTML; permit cached shell navigation when offline.
+    event.respondWith(fetch(request).catch(async () =>
+      (await caches.match(request)) || (await caches.match('./index.html'))));
+    return;
+  }
+
+  event.respondWith(caches.match(request).then(async cached => {
+    if (cached) return cached;
+    const response = await fetch(request);
+    if (response.ok && SHELL.some(path => new URL(path, self.registration.scope).href === request.url)) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone()).catch(() => {});
+    }
+    return response;
+  }));
 });
