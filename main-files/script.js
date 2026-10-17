@@ -21,6 +21,7 @@ const progDown = document.getElementById('prog-down');
 const progUp = document.getElementById('prog-up');
 // State
 let isTesting = false;
+let testGeneration = 0;
 let currentPhase = 'idle'; // idle, ping, download, upload, finished
 let speedChart = null;
 let chartDataDown = [];
@@ -167,6 +168,12 @@ async function startTest() {
     if (isTesting)
         return;
     isTesting = true;
+    const runId = ++testGeneration;
+    const ensureActive = () => {
+      if (!isTesting || runId !== testGeneration) {
+        throw new DOMException("Speed test cancelled", "AbortError");
+      }
+    };
     startBtn.classList.add('hidden');
     stopBtn.classList.remove('hidden');
     shareBtn.classList.add('hidden');
@@ -189,9 +196,11 @@ async function startTest() {
         setGaugePhase('Finding Optimal Server...');
         gaugeSpeed.textContent = '...';
         await new Promise(resolve => setTimeout(resolve, 800));
+        ensureActive();
         setGaugePhase('Connecting...');
         await new Promise(resolve => setTimeout(resolve, 800));
         // Ping
+        ensureActive();
         setGaugePhase('Ping Test');
         gaugeSpeed.textContent = '...';
         const { ping, jitter, packetLoss } = await runPingTest(server, p => {
@@ -202,6 +211,7 @@ async function startTest() {
         finalResult.ping = ping;
         finalResult.jitter = jitter;
         // Download
+        ensureActive();
         setGaugePhase('Download Test');
         let currentDown = 0;
         const finalDown = await runDownloadTest(server, mbps => {
@@ -217,6 +227,7 @@ async function startTest() {
         updateGauge(0);
         await new Promise(r => setTimeout(r, 500));
         // Upload
+        ensureActive();
         setGaugePhase('Upload Test');
         let currentUp = 0;
         const finalUp = await runUploadTest(server, mbps => {
@@ -229,6 +240,7 @@ async function startTest() {
         progUp.style.width = '100%';
         finalResult.upload = finalUp;
         // Finish
+        ensureActive();
         setGaugePhase('Finished');
         updateGauge(finalDown); // Leave gauge at download speed
         // Calculate Grade
@@ -257,6 +269,7 @@ async function startTest() {
         }
     }
     catch (e) {
+        if (runId !== testGeneration) return;
         if (e.name !== 'AbortError') {
             console.error(e);
             setGaugePhase('Error');
@@ -267,6 +280,7 @@ async function startTest() {
         }
     }
     finally {
+        if (runId !== testGeneration) return;
         isTesting = false;
         startBtn.classList.remove('hidden');
         startBtn.textContent = 'Retry Test';
@@ -277,12 +291,14 @@ async function startTest() {
 function stopCurrentTest() {
     if (!isTesting)
         return;
-    abortTest();
+    testGeneration += 1;
+        abortTest();
     isTesting = false;
     setGaugePhase('Aborted');
     updateGauge(0);
     startBtn.classList.remove('hidden');
     stopBtn.classList.add('hidden');
+        shareBtn.classList.add('hidden');
 }
 // Connection Details Fetch
 async function fetchConnectionDetails() {
