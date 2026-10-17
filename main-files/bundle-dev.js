@@ -23,7 +23,11 @@
           div.className = `log-entry log-${type}`;
           const now = /* @__PURE__ */ new Date();
           const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}.${now.getMilliseconds().toString().padStart(3, "0")}`;
-          div.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+          const stamp = document.createElement("span");
+        stamp.className = "log-time";
+        stamp.textContent = "[" + time + "] ";
+        div.append(stamp, document.createTextNode(String(message).slice(0, 800)));
+        while (logContainer.children.length > 300) logContainer.firstChild.remove();
           logContainer.appendChild(div);
           logContainer.scrollTop = logContainer.scrollHeight;
         }
@@ -90,9 +94,11 @@
           if (el) el.addEventListener("change", saveSettings);
         });
         document.getElementById("dev-clear-storage")?.addEventListener("click", () => {
-          if (confirm("WARNING: Nuking localStorage. Proceed?")) {
-            localStorage.clear();
-            console.error("[STORAGE] LocalStorage destroyed.");
+          if (confirm("Clear SpeedPulse-prefixed browser settings only?")) {
+                const appKeys = Object.keys(localStorage).filter((key) =>
+                    key.startsWith("speedpulse_") || key.startsWith("speedpulse-"));
+                appKeys.forEach((key) => localStorage.removeItem(key));
+                console.info("[STORAGE] Removed " + appKeys.length + " SpeedPulse preference keys.");
             saveSettings();
             refreshStateInspector();
           }
@@ -100,15 +106,16 @@
         document.getElementById("dev-clear-sw")?.addEventListener("click", () => {
           if ("serviceWorker" in navigator) {
             navigator.serviceWorker.getRegistrations().then((regs) => {
-              regs.forEach((r) => r.unregister());
+              regs.filter((r) => r.scope === new URL("./", location.href).href)
+                    .forEach((r) => r.unregister());
               console.warn("[SW] Terminated all Service Workers.");
             });
           }
         });
         document.getElementById("dev-refresh-state")?.addEventListener("click", refreshStateInspector);
         document.getElementById("dev-stress-confetti")?.addEventListener("click", () => {
-          console.warn("[GPU] Initiating 10,000 particle stress test...");
-          spawnStressConfetti(1e4);
+          console.warn("[GPU] Initiating bounded 300-particle animation test...");
+          spawnStressConfetti(300);
         });
         document.getElementById("dev-crash-webgl")?.addEventListener("click", () => {
           console.error("[GPU] Simulating WebGL context loss... (Not implemented in 2D context)");
@@ -231,7 +238,7 @@
           });
         });
         document.getElementById("dev-trigger-memory-leak")?.addEventListener("click", () => {
-          console.error("[MEMORY] Simulating fatal V8 Engine Memory Leak threshold exceeded. Heap size > 1.2GB.");
+          console.error("[MEMORY] Simulation only: no memory allocation or leak was performed.");
         });
         document.getElementById("dev-run-benchmark")?.addEventListener("click", () => {
           console.warn("[BENCHMARK] Running CPU Crypto sequence...");
@@ -252,18 +259,18 @@
         const outage503 = document.getElementById("dev-outage-503");
         const corsFail = document.getElementById("dev-cors-fail");
         if (outage503) outage503.addEventListener("change", () => {
-          if (outage503.checked) console.error("[DOOMSDAY] Global HTTP 503 Outage Simulation ENGAGED. All pipeline fetch requests will artificially collapse.");
+          if (outage503.checked) console.error("[DOOMSDAY] Simulation toggle only; real fetch requests are unaffected.");
           else console.info("[DOOMSDAY] Outage simulation disengaged.");
         });
         if (corsFail) corsFail.addEventListener("change", () => {
-          if (corsFail.checked) console.warn("[SECURITY] CORS Preflight strictly blocked. Simulating Origin failure.");
+          if (corsFail.checked) console.warn("[SECURITY] Simulation toggle only; real browser CORS rules are unchanged.");
         });
         document.getElementById("dev-nuke-cdn")?.addEventListener("click", () => {
-          console.error("[CRITICAL] CDN Edge Nodes forcefully unmapped from internal DNS lookup table. Traffic blackholed.");
+          console.error("[CRITICAL] Demo only; DNS and CDN routes are not changed.");
         });
         document.getElementById("dev-reroute-bgp")?.addEventListener("click", () => {
-          console.info("[BGP] Calculating alternative network trajectory via internal routing table...");
-          setTimeout(() => console.success("[BGP] Trajectory stabilized. Edge node re-acquired via secondary ISP link."), 1500);
+          console.info("[BGP] Demo only; this page does not control BGP routing.");
+          setTimeout(() => console.info("[BGP] Demo complete: no actual ISP routing changed."), 1500);
         });
         const cacheInspector = document.getElementById("dev-cache-inspector");
         document.getElementById("dev-inspect-cache")?.addEventListener("click", async () => {
@@ -293,10 +300,10 @@
           if (!("caches" in window)) return;
           const cacheKeys = await caches.keys();
           for (let key of cacheKeys) {
-            await caches.delete(key);
+                if (key.startsWith("speedpulse-")) await caches.delete(key);
           }
-          if (cacheInspector) cacheInspector.textContent = "All caches strictly purged.";
-          console.warn("[CACHE API] Completely purged Service Worker storage.");
+          if (cacheInspector) cacheInspector.textContent = "SpeedPulse caches removed; other caches retained.";
+          console.warn("[CACHE API] Removed only SpeedPulse-owned cache entries.");
         });
         document.getElementById("dev-seed-cache")?.addEventListener("click", async () => {
           if (!("caches" in window)) return;
@@ -305,7 +312,7 @@
             const data = new Blob(['{"status": "simulated_offline", "code": 200}'], { type: "application/json" });
             await devCache.put("/api/simulated_offline_check", new Response(data));
             if (cacheInspector) cacheInspector.textContent = "Dummy payload seeded at '/api/simulated_offline_check' in cache 'speedpulse-dev-sandbox-v1'.";
-            console.success("[CACHE API] Offline injection successful.");
+            console.info("[CACHE API] Offline injection successful.");
           } catch (e) {
             console.error("[CACHE API] Seed fault.", e);
           }
