@@ -652,7 +652,7 @@ document.getElementById('select-all-history').addEventListener('change', (e) => 
 // Init PWA Service Worker
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js?v=6.0').catch(console.error);
+        navigator.serviceWorker.register('sw.js?v=7.0').catch(console.error);
     });
 }
 // Initialization
