@@ -162,19 +162,20 @@
     const pings = [];
     let failed = 0;
     for (let i = 0; i < iterations; i++) {
-      if (controller.signal.aborted) break;
+      if (controller.signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
       const start = performance.now();
       try {
-        await fetch(`${target}?bytes=0&cb=${Date.now()}_${i}`, {
-          method: "HEAD",
+        const response = await fetch(`${target}?bytes=0&cb=${Date.now()}_${i}`, {
+          method: "GET",
           signal: controller.signal,
           cache: "no-store"
         });
+        if (!response.ok) throw new Error(`HTTP ${response.status} during latency probe`);
         const duration = performance.now() - start;
         pings.push(duration);
         onProgress(duration);
       } catch (e) {
-        if (e.name === "AbortError") break;
+        if (e.name === "AbortError") throw e;
         failed++;
       }
     }
@@ -212,7 +213,7 @@
         }
       }
     } catch (e) {
-      if (e.name !== "AbortError") throw e;
+      throw e;
     }
     const totalDurationSec = (performance.now() - startTime) / 1e3;
     return totalDurationSec > 0 ? loadedBytes * 8 / (1024 * 1024) / totalDurationSec : 0;
@@ -235,12 +236,13 @@
         onProgress(estimatedMbps > 0 ? estimatedMbps : 0);
       }, 500);
       try {
-        await fetch(target, {
+        const response = await fetch(target, {
           method: "POST",
           body: blob,
-          mode: "no-cors",
+          mode: "cors",
           signal: controller.signal
         });
+            if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
         clearInterval(fakeProgressTimer);
         const durationSec = (performance.now() - startTime) / 1e3;
         const finalMbps = payloadSize * 8 / (1024 * 1024) / durationSec;
@@ -248,12 +250,7 @@
         resolve(finalMbps);
       } catch (e) {
         clearInterval(fakeProgressTimer);
-        if (e.name === "AbortError") {
-          resolve(0);
-        } else {
-          console.error("Upload failed, attempting fallback...", e);
-          resolve(0);
-        }
+        reject(e);
       }
     });
   }
