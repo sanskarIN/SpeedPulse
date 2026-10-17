@@ -290,9 +290,13 @@
                 <div class="control-group">
                     <label for="server-select" class="visually-hidden">Select Server</label>
                     <select id="server-select" aria-label="Select test server">
-                        <option value="local">Local ASP.NET Server</option>
+                        <option value="local" disabled>Local ASP.NET Server (checking...)</option>
                         <option value="cloudflare" selected>Cloudflare Global CDN</option>
                     </select>
+                    <small id="backend-status" role="status" aria-live="polite"
+                        style="display:block;font-size:.72rem;line-height:1.35;margin-top:.3rem;color:var(--text-secondary);">
+                        Checking ASP.NET availability...
+                    </small>
                 </div>
                 <div class="control-group">
                     <label for="unit-select" class="visually-hidden">Select Unit</label>
@@ -662,16 +666,7 @@
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
 
     <!-- Application Scripts (Modules) -->
-    <script>
-      // GitHub Pages hosts static assets only: its domain has no /api/down or /api/up.
-      if (window.location.hostname.endsWith('.github.io')) {
-        const serverSelect = document.getElementById('server-select');
-        const localOption = serverSelect.querySelector('option[value="local"]');
-        localOption.disabled = true;
-        localOption.textContent = 'Local ASP.NET Server (self-hosted only)';
-        serverSelect.value = 'cloudflare';
-      }
-    </script>
+    <script src="backend-status.js" defer></script>
     <script src="bundle.js"></script>
 </body>
 
