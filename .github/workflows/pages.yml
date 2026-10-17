@@ -7,6 +7,7 @@ on:
       - 'main-files/**'
       - 'src/**'
       - 'tests/**'
+      - 'scripts/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/pages.yml'
@@ -44,12 +45,15 @@ jobs:
           node --check main-files/bundle-dev.js
           node --check main-files/sw.js
           node --test tests/site.test.cjs
+          node --check scripts/prepare-pages.cjs
+      - name: Stage site assets and normalize links
+        run: node scripts/prepare-pages.cjs
       - name: Set up GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload static site
         uses: actions/upload-pages-artifact@v4
         with:
-          path: main-files
+          path: pages-dist
       - name: Deploy website
         id: deployment
         uses: actions/deploy-pages@v4
