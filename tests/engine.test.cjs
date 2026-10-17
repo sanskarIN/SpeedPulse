@@ -99,3 +99,12 @@ test('shipped test flow presents upload failure inline without blocking alert', 
   assert.doesNotMatch(source, /alert\(['"]Test failed\. Please check your connection and try again/);
   assert.match(source, /sw\.js\?v=7\.0/);
 });
+
+test('bandwidth chart never calls the previously undefined latency function', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'script.ts'), 'utf8');
+  const bundled = fs.readFileSync(path.join(__dirname, '..', 'main-files', 'bundle.js'), 'utf8');
+  for (const code of [src, bundled]) {
+    assert.doesNotMatch(code, /updateLatencyPoint\s*\(/);
+    assert.match(code, /function addChartPoint\(/);
+  }
+});
