@@ -23,7 +23,7 @@ Choose **Cloudflare Global CDN** and start a test. This public endpoint is an in
 - Dynamic progress, charts, network/ISP information where available
 - Test history stored locally in the browser, CSV export, result sharing
 - Light, dark and custom themes; responsive UI; installable-web-app assets
-- Informational pages: About, Support, Privacy, Terms, and Developer Labs
+- Informational pages: About, Support, Privacy, Terms, and [Developer Labs](https://sanskarin.github.io/SpeedPulse/developer.html)
 - Backend discovery in the UI: enables the local ASP.NET option only when its health API responds
 - Optional ASP.NET Core server with bounded streaming tests, rate limiting, health/config endpoints, and same-origin access
 
@@ -49,6 +49,12 @@ docs/                   # Technical reference in Markdown (not the Pages webroot
 .github/workflows/      # CI / GitHub Pages deployment
 run.md                  # Longer local development guide
 ```
+
+## Developer options
+
+[Developer Labs](https://sanskarin.github.io/SpeedPulse/developer.html) includes a maintained diagnostics panel with backend health/config checks, bounded HTTP latency probes, browser capability summary, clearly labeled offline network simulations, scoped app-cache maintenance, and JSON diagnostic export. Local ASP.NET diagnostics require a self-hosted server; GitHub Pages remains static.
+
+See [Developer Options documentation](./docs/developer-options.md) for behavior and limitations.
 
 ## Run locally with ASP.NET Core
 
