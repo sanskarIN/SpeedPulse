@@ -291,7 +291,7 @@
                     <label for="server-select" class="visually-hidden">Select Server</label>
                     <select id="server-select" aria-label="Select test server">
                         <option value="local">Local ASP.NET Server</option>
-                        <option value="cloudflare">Cloudflare Global CDN</option>
+                        <option value="cloudflare" selected>Cloudflare Global CDN</option>
                     </select>
                 </div>
                 <div class="control-group">
@@ -544,7 +544,7 @@
                     <p style="margin-bottom: 0.8rem; font-size: 0.9rem; color: var(--text-primary);">Follow Sanskar on
                         the...</p>
                     <div class="social-links">
-                        <a href="https://github.com/Sanskar-in" target="_blank" aria-label="GitHub">
+                        <a href="https://github.com/sanskarIN" target="_blank" aria-label="GitHub">
                             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2"
                                 fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path
@@ -552,14 +552,14 @@
                                 </path>
                             </svg>
                         </a>
-                        <a href="https://x.com/Sanskar_in" target="_blank" aria-label="X (Twitter)">
+                        <a href="https://x.com/SanskarCodes" target="_blank" aria-label="X (Twitter)">
                             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2"
                                 fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M4 4l11.733 16h4.267l-11.733 -16z"></path>
                                 <path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path>
                             </svg>
                         </a>
-                        <a href="https://www.linkedin.com/in/sanskar-in/" target="_blank" aria-label="LinkedIn">
+                        <a href="https://linkedin.com/in/SanskarCodes" target="_blank" aria-label="LinkedIn">
                             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2"
                                 fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path
@@ -569,7 +569,7 @@
                                 <circle cx="4" cy="4" r="2"></circle>
                             </svg>
                         </a>
-                        <a href="https://ramsandesh.gumroad.com" target="_blank" aria-label="Gumroad E-books">
+                        <a href="https://buymeacoffee.com/SanskarCodes" target="_blank" aria-label="Buy Me a Coffee">
                             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2"
                                 fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
@@ -580,11 +580,8 @@
                 </div>
                 <div class="footer-contact">
                     <h4>Contact</h4>
-                    <!-- <a href="tel:+919795753292">📞 +91 9795753292</a> -->
-                    <a href="mailto:sanskaryadavfrom2012to2026@gmail.com">✉️ sanskaryadavfrom2012to2026@gmail.com</a>
-                    <a href="mailto:supportramsandesh@gmail.com">✉️ supportramsandesh@gmail.com</a>
-                    <a href="mailto:sanskaryadavfromghosimau2026-27@outlook.com">✉️
-                        sanskaryadavfromghosimau2026-27@outlook.com</a>
+                    <a href="https://sanskarin.github.io/contact">Contact the maintainer</a>
+                    <a href="https://github.com/sanskarIN/SpeedPulse/issues">Report a problem</a>
                 </div>
                 <div class="footer-legal">
                     <h4>Legal & About</h4>
@@ -665,6 +662,16 @@
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
 
     <!-- Application Scripts (Modules) -->
+    <script>
+      // GitHub Pages hosts static assets only: its domain has no /api/down or /api/up.
+      if (window.location.hostname.endsWith('.github.io')) {
+        const serverSelect = document.getElementById('server-select');
+        const localOption = serverSelect.querySelector('option[value="local"]');
+        localOption.disabled = true;
+        localOption.textContent = 'Local ASP.NET Server (self-hosted only)';
+        serverSelect.value = 'cloudflare';
+      }
+    </script>
     <script src="bundle.js"></script>
 </body>
 
