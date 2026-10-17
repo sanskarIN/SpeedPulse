@@ -127,12 +127,7 @@ function updateChartTheme() {
 }
 
 function addChartPoint(val, isDown) {
-    // Simulate latency variations
-    const basePing = 15;
-    const jitter = Math.random() * 5;
-    const loadPing = basePing + jitter + (val > 0 ? (100 / val) : 0);
-    updateLatencyPoint(loadPing);
-
+    // Chart actual download/upload samples only. Do not invent latency readings.
     if (!speedChart) return;
     const now = new Date().toLocaleTimeString();
     chartLabels.push(now);
