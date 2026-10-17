@@ -97,8 +97,26 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view v1.0.0 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "v1.0.0 already exists; will not overwrite a stable release."
-            exit 1
+            # Correct the just-published first release before its first download.
+            # Never rewrite a version users have already downloaded.
+            downloads=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v1.0.0" \
+              --jq '[.assets[].download_count] | add // 0')
+            if [ "$downloads" != "0" ]; then
+              echo "v1.0.0 has already been downloaded; refusing to rewrite its tag/assets."
+              exit 1
+            fi
+            echo "Replacing zero-download first release to include the verified chart fix."
+            gh release delete v1.0.0 --yes --cleanup-tag --repo "${GITHUB_REPOSITORY}"
+            for attempt in $(seq 1 15); do
+              if ! gh release view v1.0.0 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+            if gh release view v1.0.0 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              echo "Existing release did not disappear; aborting safely."
+              exit 1
+            fi
           fi
           gh release create v1.0.0 release-assets/*.zip \
             --repo "${GITHUB_REPOSITORY}" \
