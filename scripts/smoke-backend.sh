@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 host='http://127.0.0.1:5087'
-dotnet ./publish/SpeedPulseBackend.dll --urls "$host" >/tmp/speedpulse-dotnet.log 2>&1 &
+(
+  cd publish
+  dotnet ./SpeedPulseBackend.dll --urls "$host"
+) >/tmp/speedpulse-dotnet.log 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true; cat /tmp/speedpulse-dotnet.log' EXIT
 
@@ -16,8 +19,10 @@ done
 test "$ready" = 1 || { echo 'Backend did not start'; exit 1; }
 grep -q '"service":"SpeedPulseBackend"' /tmp/speedpulse-health.json
 curl --silent --fail "$host/api/config" | grep -q '"maxDownloadBytes":67108864'
-curl --silent --fail "$host/" | grep -q 'SpeedPulse'
-curl --silent --fail "$host/backend-status.js" | grep -q '/api/health'
+curl --silent --fail "$host/" -o /tmp/speedpulse-index.html
+grep -q 'SpeedPulse' /tmp/speedpulse-index.html
+curl --silent --fail "$host/backend-status.js" -o /tmp/speedpulse-status.js
+grep -q '/api/health' /tmp/speedpulse-status.js
 
 # HEAD is a genuinely bodyless probe; GET transfers the exact number of bytes.
 curl --silent --fail --head "$host/api/down?bytes=1024" | grep -qi 'content-length: 1024'
