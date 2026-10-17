@@ -2,14 +2,14 @@
 
 **Open-source internet speed testing in the browser, with an optional ASP.NET Core backend.**
 
-[Website (after Pages activation)](https://sanskarin.github.io/SpeedPulse/) · [Source code](https://github.com/sanskarIN/SpeedPulse) · [Report an issue](https://github.com/sanskarIN/SpeedPulse/issues) · [Contact](https://sanskarin.github.io/contact)
+[Live website](https://sanskarin.github.io/SpeedPulse/) · [Source code](https://github.com/sanskarIN/SpeedPulse) · [Report an issue](https://github.com/sanskarIN/SpeedPulse/issues) · [Contact](https://sanskarin.github.io/contact)
 
 SpeedPulse provides a responsive speed-test dashboard with latency, download, upload, results history, charts, theming, and share/export tools. It offers two distinct ways to run:
 
 - **Hosted / GitHub Pages:** Static frontend using Cloudflare's public speed-test endpoints. No .NET backend runs on GitHub Pages.
 - **Self-hosted / local:** ASP.NET Core 10 app with `/api/down` and `/api/up` endpoints. When testing from the same machine, the local option measures loopback throughput **not** ISP speed.
 
-> **Measurement caveat:** Results are browser-level estimates influenced by browser, device, load, server, network path and external-service availability. Failed HTTP probes are not the same thing as true IP packet loss; the "packet loss" display represents failed application-layer samples. Live upload progress is an estimate rather than instrumented byte-level progress.
+> **Measurement caveat:** Results are browser-level estimates influenced by browser, device, load, server, network path and external-service availability. Failed HTTP probes are not the same thing as true IP packet loss; the "packet loss" display represents failed application-layer samples. Browser Fetch does not expose precise upload byte progress; SpeedPulse now reports an upload result only after the server confirms success.
 
 ## Try it
 
@@ -24,7 +24,8 @@ Choose **Cloudflare Global CDN** and start a test. This public endpoint is an in
 - Test history stored locally in the browser, CSV export, result sharing
 - Light, dark and custom themes; responsive UI; installable-web-app assets
 - Informational pages: About, Support, Privacy, Terms, and Developer Labs
-- Optional self-hosted C# backend for controlled testing
+- Backend discovery in the UI: enables the local ASP.NET option only when its health API responds
+- Optional ASP.NET Core server with bounded streaming tests, rate limiting, health/config endpoints, and same-origin access
 
 ## Technology
 
@@ -49,49 +50,46 @@ docs/                   # Technical reference in Markdown (not the Pages webroot
 run.md                  # Longer local development guide
 ```
 
-## Run locally
+## Run locally with ASP.NET Core
 
-**Requirements:** Node.js + npm and the .NET 10 SDK for the backend.
+**Requirement:** [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). The included browser bundle is already built.
 
 ```bash
 git clone https://github.com/sanskarIN/SpeedPulse.git
 cd SpeedPulse
-npm ci
+dotnet run --project SpeedPulseBackend.csproj
 ```
 
-The repository includes prebuilt browser assets in `main-files/`, but the ASP.NET Core backend serves files from `wwwroot/`. Copy the assets before starting the backend:
+Open the URL shown in the terminal (by default `http://localhost:5205` with the development profile). **No copying into `wwwroot/` is necessary:** ASP.NET now serves `main-files/` directly. The self-hosted application detects the healthy backend and enables **Local ASP.NET Server**. Cloudflare remains available to measure the public Internet path.
+
+For frontend development, install Node.js, then run:
 
 ```bash
-# macOS / Linux
-mkdir -p wwwroot
-cp -R main-files/. wwwroot/
-dotnet run
+npm ci
+npm run build
+npm test
 ```
 
-On Windows PowerShell:
+The build writes browser bundles to `main-files/`. Run `dotnet build -c Release` for a backend compilation check.
 
-```powershell
-New-Item -ItemType Directory -Force wwwroot | Out-Null
-Copy-Item main-files/* wwwroot/ -Recurse -Force
-dotnet run
-```
-
-Open the URL shown by `dotnet run` in your terminal. Use **Local ASP.NET Server** for the self-hosted endpoints or **Cloudflare Global CDN** to test over the public internet. The local option can test only the link to the machine hosting the backend. Edit TypeScript under `src/`, then run `npm run build` to rebuild the browser bundles before committing source changes. Run `npm test` to validate the deployable static assets.
-
-### Local API
+### ASP.NET Core test API
 
 | Method | Path | Behavior |
 | --- | --- | --- |
-| GET | `/api/down?bytes=26214400` | Streams a requested quantity of bytes; **do not expose publicly without limits** |
-| POST | `/api/up` | Reads a submitted upload body and reports bytes received |
+| GET | `/api/health` | Backend status, service name and version |
+| GET | `/api/config` | Current transfer limits and rate limit |
+| GET or HEAD | `/api/down?bytes=26214400` | Uncached download or bodyless ping probe; 0–64 MiB allowed, 25 MiB default |
+| POST | `/api/up` | Measures received upload bytes; request body capped at 8 MiB |
 
-**Security note:** The demo backend currently allows cross-origin requests and an unbounded `bytes` parameter. Use it only in a trusted environment until request size/rate limits, authentication or other appropriate protections are added. GitHub Pages never executes these endpoints.
+Measurement endpoints have per-IP fixed-window rate limiting (60 requests/minute per running server instance) and report invalid download sizes with HTTP 400, oversized uploads with HTTP 413, and excess requests with HTTP 429.
+
+**Hosting security:** The backend is designed primarily for local or trusted-LAN use. CORS is not opened to arbitrary websites, but rate limiting is not a substitute for authentication, access controls, bandwidth quotas or network-level protections when hosting publicly. A local test from the same machine measures loopback throughput, **not** your ISP download speed.
 
 ## GitHub Pages deployment
 
-The workflow at [`.github/workflows/pages.yml`](./.github/workflows/pages.yml) uploads **only** `main-files/` as a static site. It runs on pushes to `main` and may be started manually under **Actions**.
+The workflow at [`.github/workflows/pages.yml`](./.github/workflows/pages.yml) publishes a staged copy of `main-files/` as a static site (with legacy links normalized). It runs on pushes to `main` and may be started manually under **Actions**.
 
-Repository administrators should select **Settings → Pages → Build and deployment → Source: GitHub Actions**. Check the [Pages deployment run](https://github.com/sanskarIN/SpeedPulse/actions/workflows/pages.yml) before describing the site as live. The site is expected at [https://sanskarin.github.io/SpeedPulse/](https://sanskarin.github.io/SpeedPulse/) once deployment succeeds.
+Pages is configured to deploy through GitHub Actions. Confirm the newest build at [Pages deployment runs](https://github.com/sanskarIN/SpeedPulse/actions/workflows/pages.yml). GitHub Pages cannot execute the C# API, so the public version uses Cloudflare. The expected site URL is [https://sanskarin.github.io/SpeedPulse/](https://sanskarin.github.io/SpeedPulse/).
 
 ## Privacy and dependencies
 
@@ -108,6 +106,10 @@ The [complete URL and external-service inventory](./docs/links.md) identifies ea
 - [Creator's GitHub](https://github.com/sanskarIN) · [Website](https://sanskarin.github.io)
 - [Contact](https://sanskarin.github.io/contact) · [X](https://x.com/SanskarCodes) · [LinkedIn](https://linkedin.com/in/SanskarCodes)
 - Support development: [Buy Me a Coffee](https://buymeacoffee.com/SanskarCodes) · [Razorpay](https://razorpay.me/@SanskarCodes) · [PayPal.Me](https://paypal.me/SanskarCodes)
+
+## Release candidate checks
+
+[Release Candidate CI](https://github.com/sanskarIN/SpeedPulse/actions/workflows/ci.yml) runs browser tests, a frontend build, an ASP.NET Core 10 build/publish, and HTTP smoke tests for the API. Review [the v1.0.0 checklist](./docs/release-readiness.md) before tagging or publishing a release. **No v1.0.0 GitHub release has been published as part of this preparation.**
 
 ## Contributing
 
