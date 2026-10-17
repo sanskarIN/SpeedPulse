@@ -230,42 +230,61 @@ async function startTest() {
         ensureActive();
         setGaugePhase('Upload Test');
         let currentUp = 0;
-        const finalUp = await runUploadTest(server, mbps => {
+        let finalUp = null;
+        let uploadError = '';
+        try {
+          finalUp = await runUploadTest(server, mbps => {
             currentUp = mbps;
             updateGauge(mbps);
             valUp.textContent = formatSpeed(mbps, document.getElementById('unit-select').value);
             addChartPoint(mbps, false);
         });
-        valUp.textContent = formatSpeed(finalUp, document.getElementById('unit-select').value);
-        progUp.style.width = '100%';
-        finalResult.upload = finalUp;
+          valUp.textContent = formatSpeed(finalUp, document.getElementById('unit-select').value);
+          progUp.style.width = '100%';
+          finalResult.upload = finalUp;
+        } catch (error) {
+          if (error && error.name === 'AbortError') throw error;
+          uploadError = server === 'cloudflare'
+            ? 'Cloudflare upload request was unavailable (network, CORS, or HTTP failure).'
+            : 'The local ASP.NET upload endpoint did not respond successfully.';
+          console.warn('[SpeedPulse] Upload measurement unavailable:', error);
+          valUp.textContent = '--';
+          progUp.style.width = '0%';
+        }
         // Finish
         ensureActive();
         setGaugePhase('Finished');
         updateGauge(finalDown); // Leave gauge at download speed
         // Calculate Grade
-        const gradeObj = calculateGrade(finalDown, finalUp, ping);
+        const gradeObj = uploadError ? {
+          grade: '-',
+          text: 'Partial result: download and ping measured; upload unavailable. ' + uploadError
+        } : calculateGrade(finalDown, finalUp, ping);
         document.getElementById('overall-grade').textContent = gradeObj.grade;
         document.getElementById('grade-desc').textContent = gradeObj.text;
         // Update readiness indicators
         const inds = document.querySelectorAll('.status-indicator');
         inds[0].className = 'status-indicator ' + (finalDown > 25 ? 'status-pass' : 'status-fail'); // 4k
-        inds[1].className = 'status-indicator ' + ((finalDown > 10 && finalUp > 3 && ping < 100) ? 'status-pass' : 'status-fail'); // Video
+        inds[1].className = 'status-indicator ' + ((finalDown > 10 && finalUp != null && finalUp > 3 && ping < 100) ? 'status-pass' : 'status-fail'); // Video
         inds[2].className = 'status-indicator ' + ((finalDown > 25 && ping < 50 && jitter < 10) ? 'status-pass' : 'status-fail'); // Gaming
-        inds[3].className = 'status-indicator ' + (finalUp > 20 ? 'status-pass' : 'status-fail'); // Upload
+        inds[3].className = 'status-indicator ' + (finalUp != null && finalUp > 20 ? 'status-pass' : 'status-fail'); // Upload
+        if (uploadError) {
+          if (inds[1]) inds[1].className = 'status-indicator';
+          if (inds[3]) inds[3].className = 'status-indicator';
+        }
         saveResult(finalResult);
         renderHistory();
-        playSound('finish');
+        try { playSound('finish'); } catch (error) { console.warn('Audio notification skipped:', error); }
         // Check personal best
         const history = getHistory();
         if (history.length > 1) {
             const previousBest = Math.max(...history.slice(1).map(h => h.download || 0));
             if (finalDown > previousBest) {
-                fireConfetti();
+                try { fireConfetti(); } catch (error) { console.warn('Celebration animation skipped:', error); }
             }
         }
         else if (finalDown > 100) {
-            fireConfetti(); // First time but really fast
+            try { fireConfetti(); } catch (error) { console.warn('Celebration animation skipped:', error); } // First time but really fast
         }
     }
     catch (e) {
@@ -273,7 +292,9 @@ async function startTest() {
         if (e.name !== 'AbortError') {
             console.error(e);
             setGaugePhase('Error');
-            alert('Test failed. Please check your connection and try again.');
+            document.getElementById('grade-desc').textContent =
+          'Could not complete the test: ' + (e instanceof Error ? e.message : 'network request failed') +
+          '. Try again or change servers.';
         }
         else {
             setGaugePhase('Aborted');
