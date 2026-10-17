@@ -124,7 +124,9 @@ export async function runUploadTest(server = 'cloudflare', onProgress) {
     const buffer = new Uint8Array(payloadSize);
     for (let i = 0; i < payloadSize; i++) buffer[i] = Math.random() * 255;
     const start = performance.now();
-    const response = await fetch(target, {
+    // Cloudflare's upload API expects a bytes parameter; the local server ignores it.
+    const uploadUrl = server === 'cloudflare' ? target + '?bytes=' + payloadSize : target;
+    const response = await fetch(uploadUrl, {
         method: 'POST',
         body: new Blob([buffer], { type: 'text/plain' }),
         mode: 'cors',
