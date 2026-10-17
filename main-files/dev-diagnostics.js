@@ -185,6 +185,13 @@
   function simulate() {
     var jitter = clamp(document.getElementById("spd-jitter").value, 0, 200);
     var failure = clamp(document.getElementById("spd-failure").value, 0, 100);
+    var offline = Boolean(document.getElementById("dev-force-offline")?.checked);
+    if (offline) failure = 100;
+    var throttle = Boolean(document.getElementById("dev-throttle-enabled")?.checked);
+    var downCap = throttle ? clamp(document.getElementById("dev-throttle-down")?.value, 1, 10000) : null;
+    var upCap = throttle ? clamp(document.getElementById("dev-throttle-up")?.value, 1, 10000) : null;
+    var wsDrops = Boolean(document.getElementById("dev-wss-drops")?.checked);
+    var wsLatency = clamp(document.getElementById("dev-wss-latency")?.value, 0, 5000);
     var durations = [];
     var failed = 0;
     for (var i = 0; i < 20; i++) {
@@ -200,6 +207,10 @@
       simulated: true,
       configuredJitterMs: jitter,
       configuredFailurePercent: failure,
+      simulatedOffline: offline,
+      downCapMbps: downCap,
+      upCapMbps: upCap,
+      mockWebSocket: { connected: !wsDrops, delayMs: wsLatency },
       successful: durations.length,
       failed: failed,
       averageMs: average == null ? null : Number(average.toFixed(2))
@@ -207,7 +218,10 @@
     setStatus("spd-simulation", "Simulation only: " + failed + "/20 failed", "neutral");
     text("spd-simulation-detail", "Synthetic average " +
       (average == null ? "n/a" : average.toFixed(1) + " ms") +
-      ". No requests were sent or real connection settings changed.");
+      (offline ? ". Offline preview active." : "") +
+      (throttle ? ". Mock cap: down " + downCap + " Mbps, up " + upCap + " Mbps." : "") +
+      (wsDrops ? ". Mock WebSocket disconnected." : ". Mock WebSocket delay " + wsLatency + " ms.") +
+      " No requests were sent or real connection settings changed.");
     record();
   }
 
@@ -266,6 +280,77 @@
     setStatus("spd-export", "Diagnostic report saved", "success");
   }
 
+  function wireLegacySimulators() {
+    // The original controls are simulation inputs, not real browser/network overrides.
+    var mappings = [
+      ["dev-inject-jitter", "spd-jitter", "spd-jitter-value", 200],
+      ["dev-packet-loss", "spd-failure", "spd-failure-value", 100]
+    ];
+    mappings.forEach(function (pair) {
+      var legacy = document.getElementById(pair[0]);
+      var slider = document.getElementById(pair[1]);
+      if (!legacy || !slider) return;
+      var sync = function () {
+        var value = clamp(legacy.value, 0, pair[3]);
+        slider.value = String(value);
+        text(pair[2], value);
+      };
+      legacy.addEventListener("input", sync);
+      legacy.addEventListener("change", sync);
+      sync();
+    });
+
+    var gps = document.getElementById("dev-spoof-gps");
+    var latitude = document.getElementById("dev-gps-lat");
+    var longitude = document.getElementById("dev-gps-lng");
+    if (gps && latitude && longitude) {
+      var preview = document.createElement("div");
+      preview.className = "spd-status";
+      preview.setAttribute("role", "status");
+      preview.style.fontSize = ".8rem";
+      gps.closest(".dev-panel")?.appendChild(preview);
+      var updateGPS = function () {
+        var lat = Number(latitude.value);
+        var lon = Number(longitude.value);
+        if (!gps.checked) preview.textContent = "GPS preview disabled; real location unchanged.";
+        else if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180)
+          preview.textContent = "Enter valid latitude and longitude for preview.";
+        else preview.textContent = "Mock coordinates: " + lat.toFixed(4) + ", " + lon.toFixed(4) + " (simulation only)";
+      };
+      [gps, latitude, longitude].forEach(function (el) {
+        el.addEventListener("change", updateGPS);
+        el.addEventListener("input", updateGPS);
+      });
+      updateGPS();
+    }
+
+    var observeToggle = document.getElementById("dev-dom-observer");
+    if (observeToggle && typeof MutationObserver === "function") {
+      var observer = null;
+      var count = 0;
+      var summary = document.createElement("span");
+      summary.className = "spd-note";
+      observeToggle.closest(".setting-row")?.appendChild(summary);
+      observeToggle.addEventListener("change", function () {
+        if (observer) { observer.disconnect(); observer = null; }
+        if (!observeToggle.checked) {
+          summary.textContent = " DOM observation stopped";
+          return;
+        }
+        count = 0;
+        // Watch a small diagnostics subtree, never the entire large developer page.
+        var root = document.getElementById("speedpulse-diagnostics");
+        if (!root) return;
+        observer = new MutationObserver(function (mutations) {
+          count += mutations.length;
+          summary.textContent = " " + count + " diagnostics DOM changes observed";
+        });
+        observer.observe(root, { childList: true, subtree: true, characterData: true });
+        summary.textContent = " Watching diagnostic updates";
+      });
+    }
+  }
+
   function init() {
     if (document.getElementById("speedpulse-diagnostics")) return;
     var css = document.createElement("style");
@@ -320,6 +405,7 @@
         text(name + "-value", event.target.value);
       });
     });
+    wireLegacySimulators();
     checkBackend();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
