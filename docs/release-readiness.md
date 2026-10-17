@@ -1,10 +1,10 @@
-# SpeedPulse v1.0.0 release-candidate checklist
+# SpeedPulse v1.0.0 stable-release validation
 
-**Status:** Code prepared for review. Do **not** publish a tag or release until the maintainer approves.
+**Status:** [v1.0.0 was published as the first stable GitHub release on October 17, 2026](https://github.com/sanskarIN/SpeedPulse/releases/tag/v1.0.0). The automated checks passed before publishing.
 
 This checklist separates *automated evidence* from checks that still need real devices and networks.
 
-## Included in this candidate
+## Included in v1.0.0
 
 - ASP.NET Core 10 backend serves the browser UI from `main-files/` without copying to `wwwroot/`.
 - Uncached same-origin test API, HEAD/GET latency probes, bounded downloads (0–64 MiB), bounded uploads (8 MiB), and 60-request/minute per-IP test rate limit.
@@ -15,10 +15,10 @@ This checklist separates *automated evidence* from checks that still need real d
 - Release Candidate CI builds the TypeScript bundles, checks browser behavior, builds/publishes .NET 10 and performs HTTP smoke testing.
 - Existing README and local run guide updated for the current architecture.
 
-## Evidence to check immediately before tagging
+## Automated evidence collected before tagging
 
-- [ ] [Latest Release Candidate CI run](https://github.com/sanskarIN/SpeedPulse/actions/workflows/ci.yml) is **green** for the intended release commit.
-- [ ] [Latest Pages deployment](https://github.com/sanskarIN/SpeedPulse/actions/workflows/pages.yml) is **green** for the intended release commit, if website changes are included.
+- [x] [Latest Release Candidate CI run](https://github.com/sanskarIN/SpeedPulse/actions/workflows/ci.yml) is **green** for the intended release commit.
+- [x] [Latest Pages deployment](https://github.com/sanskarIN/SpeedPulse/actions/workflows/pages.yml) is **green** for the intended release commit, if website changes are included.
 - [ ] No secrets, developer-local files, or generated `bin/` and `obj/` files are newly committed.
 - [ ] `main-files/bundle.js` and `main-files/bundle-dev.js` have been rebuilt from the reviewed source.
 - [ ] Release notes and version numbers match the actual tagged commit.
@@ -42,4 +42,4 @@ This checklist separates *automated evidence* from checks that still need real d
 - Real packet loss via suitable transport probes rather than application-layer HTTP failure ratio.
 - End-to-end browser automation covering cloud/CDN failures and narrow mobile layouts.
 
-**Maintainer decision requested:** approve tagging/publishing v1.0.0, or request further development. No release is created by this checklist.
+**Post-release follow-up:** report reproducible issues through the repository's issue tracker. Additional browser, accessibility, and real-network checks are welcome for future maintenance releases. The v1.0.0 stable tag remains fixed at its verified release commit.
