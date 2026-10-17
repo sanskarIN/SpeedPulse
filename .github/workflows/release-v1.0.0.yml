@@ -1,0 +1,108 @@
+name: Publish SpeedPulse v1.0.0
+
+# One-time, reviewable release workflow. It triggers when first added to main.
+# It only creates a stable release after web tests, ASP.NET build and smoke checks succeed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v1.0.0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: speedpulse-stable-v1.0.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify, package, and publish v1.0.0
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Validate frontend and build current sources
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          npm test
+          node --check main-files/bundle.js
+          node --check main-files/bundle-dev.js
+          node --check main-files/backend-status.js
+          node --check main-files/dev-diagnostics.js
+          node --check main-files/sw.js
+          node --check scripts/prepare-pages.cjs
+
+      - name: Build and smoke-test ASP.NET Core
+        run: |
+          set -euo pipefail
+          dotnet restore SpeedPulseBackend.csproj
+          dotnet build SpeedPulseBackend.csproj --configuration Release --no-restore
+          dotnet publish SpeedPulseBackend.csproj --configuration Release --no-build --output ./publish
+          test -s publish/SpeedPulseBackend.dll
+          test -s publish/main-files/index.html
+          bash scripts/smoke-backend.sh
+
+      - name: Prepare static web archive
+        run: |
+          set -euo pipefail
+          node scripts/prepare-pages.cjs
+          mkdir -p release-assets
+          (cd pages-dist && zip -qr ../release-assets/SpeedPulse-v1.0.0-web.zip .)
+          unzip -l release-assets/SpeedPulse-v1.0.0-web.zip | grep 'index.html'
+
+      - name: Package self-contained Windows, Linux, and macOS hosts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for rid in linux-x64 win-x64 osx-arm64; do
+            echo "Publishing $rid..."
+            dotnet publish SpeedPulseBackend.csproj \
+              --configuration Release \
+              --runtime "$rid" \
+              --self-contained true \
+              -p:PublishSingleFile=true \
+              -p:IncludeNativeLibrariesForSelfExtract=true \
+              --output "release-build/$rid"
+            test -s "release-build/$rid/main-files/index.html"
+            if [ "$rid" = "win-x64" ]; then
+              test -s "release-build/$rid/SpeedPulseBackend.exe"
+            else
+              test -s "release-build/$rid/SpeedPulseBackend"
+            fi
+            (cd release-build && zip -qr "../release-assets/SpeedPulse-v1.0.0-$rid.zip" "$rid")
+          done
+          ls -lh release-assets/*.zip
+
+      - name: Publish GitHub stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v1.0.0 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "v1.0.0 already exists; will not overwrite a stable release."
+            exit 1
+          fi
+          gh release create v1.0.0 release-assets/*.zip \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "SpeedPulse v1.0.0 — First Stable Release" \
+            --notes-file docs/releases/v1.0.0.md \
+            --latest
