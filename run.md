@@ -1,91 +1,62 @@
-# Complete Guide: How to Run the SpeedPulse Internet Speed Checker
+# Run and develop SpeedPulse
 
-This document provides exhaustive, unshortened instructions on how to set up, build, and run the SpeedPulse Internet Speed Checker locally on your machine. This application utilizes a modern full-stack architecture with an ASP.NET Core backend and a TypeScript-powered frontend.
+SpeedPulse supports **two deployment modes**: static GitHub Pages using Cloudflare, and a self-hosted **ASP.NET Core 10** web application using the same frontend plus local test endpoints.
 
-## 1. System Prerequisites
+## Self-hosted .NET application
 
-Before you can run the application, you must ensure that your system has the correct SDKs and runtime environments installed. This project requires two major ecosystems:
+Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), clone the repository, then:
 
-### A. .NET SDK (For the Backend)
-The backend is written in C# utilizing the minimal API features of ASP.NET Core. 
-1. Download the **.NET 10.0 SDK** (or whichever version is currently specified in your project) from the official Microsoft .NET website: https://dotnet.microsoft.com/download
-2. Run the installer and follow the standard installation prompts.
-3. Once installed, verify the installation by opening a command prompt or PowerShell and typing:
-   ```bash
-   dotnet --info
-   ```
-   You should see the .NET SDK version listed. If you do not, you may need to restart your terminal or computer to refresh your system's `PATH` variables.
+```bash
+dotnet restore SpeedPulseBackend.csproj
+dotnet run --project SpeedPulseBackend.csproj
+```
 
-### B. Node.js & npm (For the Frontend Compilation)
-The frontend logic is written in strict TypeScript. Browsers cannot run TypeScript natively, so we use the TypeScript Compiler (`tsc`) via Node.js to transpile the `.ts` files into browser-compatible JavaScript (`.js`).
-1. Download **Node.js** from the official website: https://nodejs.org/
-2. Install the LTS (Long Term Support) version. This installation includes `npm` (Node Package Manager).
-3. Verify the installation by running:
-   ```bash
-   node -v
-   npm -v
-   ```
+Open the HTTP/HTTPS address shown by the dotnet console. The development HTTP profile normally uses `http://localhost:5205`, but always follow the actual console output. ASP.NET Core serves the `main-files/` directory directly: **do not create or copy a separate `wwwroot/` folder**.
 
-## 2. Compiling the Frontend (TypeScript)
+A working ASP.NET server responds to `/api/health` and `/api/config`. The UI enables the local server selector once its health probe succeeds. Select **Local ASP.NET Server** to test the route to the running backend (often loopback); select **Cloudflare Global CDN** for public-network testing.
 
-The source code for the frontend is located in the `src/` directory. These `.ts` files must be compiled and output into the `wwwroot/` directory so that the ASP.NET Core server can serve them as static files.
+### Test/diagnostic endpoints
 
-1. Open a terminal and navigate to the root directory of the project (where the `package.json` and `tsconfig.json` files are located).
-2. Install the necessary development dependencies (such as the TypeScript compiler):
-   ```bash
-   npm install
-   ```
-3. Run the TypeScript compiler:
-   ```bash
-   npx tsc
-   ```
-   *(Note: The `tsconfig.json` file is configured to look in the `src/` folder and output the resulting `script.js`, `history.js`, `speedtest.js`, and `utils.js` directly into the `wwwroot/` folder. If `npx tsc` completes without any critical errors, the compilation was successful.)*
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/health` | Backend availability and version |
+| `GET /api/config` | Supported download/upload limits and rate limits |
+| `GET /api/down?bytes=1048576` | Stream 1 MiB of uncached data |
+| `HEAD /api/down?bytes=0` | Minimal latency probe |
+| `POST /api/up` | Consume uploaded test bytes and report their count |
 
-## 3. Building the Backend (ASP.NET Core)
+Downloads are capped at 64 MiB per request; uploads are capped at 8 MiB. Repeated test requests are subject to a per-IP rate limit of 60 requests/minute. The backend avoids permissive CORS. Restrict network access for publicly reachable instances, since speed-test endpoints can consume bandwidth.
 
-The backend handles the extreme-throughput data streaming required to accurately measure Gigabit internet speeds locally. It is defined primarily in the `Program.cs` file.
+## Frontend development
 
-1. In the same terminal at the project root, restore any .NET dependencies and compile the C# code by running:
-   ```bash
-   dotnet build
-   ```
-2. You should see a message indicating `Build succeeded.` with 0 errors.
+Install a current Node.js LTS. The deployable JavaScript bundles are kept in `main-files/` and built from TypeScript in `src/`.
 
-## 4. Running the Application
+```bash
+npm ci
+npm run build
+npm test
+```
 
-Once both the frontend and backend are successfully compiled, you can launch the local web server.
+For the full backend compilation and publish validation:
 
-1. Run the following command to start the Kestrel web server:
-   ```bash
-   dotnet run
-   ```
-2. The console will output several lines indicating that the application has started. Look for a line that resembles:
-   ```
-   info: Microsoft.Hosting.Lifetime[14]
-         Now listening on: http://localhost:5000
-   ```
-3. Open your preferred modern web browser (Google Chrome, Mozilla Firefox, Microsoft Edge, or Safari).
-4. Type the URL provided in the console (e.g., `http://localhost:5000`) into the address bar and press Enter.
+```bash
+dotnet build SpeedPulseBackend.csproj -c Release
+dotnet publish SpeedPulseBackend.csproj -c Release -o publish
+```
 
-## 5. Performing a Speed Test
+The publish directory includes `main-files/` and the .NET executable. Run the published DLL from inside the publish directory so its static web root is found.
 
-Once the web interface loads:
-1. Locate the **Select Server** dropdown on the main interface.
-2. You have two choices:
-   - **Local ASP.NET Server:** This targets the `dotnet run` instance you just started. It measures the throughput capacity of your local network (loopback if on the same machine, or Wi-Fi/LAN if testing from another device on your network).
-   - **Cloudflare Global CDN:** This targets Cloudflare's edge nodes. It measures your actual ISP internet connection speed.
-3. Click the **Start Test** button.
-4. The application will sequentially run a Ping (Latency) test, a Download throughput test, and finally an Upload throughput test. You can view the real-time graph updating dynamically.
+## GitHub Pages
 
-## 6. Stopping the Server
-
-When you are finished testing the application, you must stop the ASP.NET Core server to free up the network port (e.g., port 5000).
-1. Return to the terminal where `dotnet run` is active.
-2. Press `Ctrl + C` on your keyboard.
-3. The server will gracefully shut down.
+See [the website](https://sanskarin.github.io/SpeedPulse/) and [Pages workflow](https://github.com/sanskarIN/SpeedPulse/actions/workflows/pages.yml). Pages hosts only static assets; it **cannot run the ASP.NET Core endpoints**. The live browser application should keep its server selector in Cloudflare mode when local ASP.NET is unavailable.
 
 ## Troubleshooting
 
-- **Port in use error:** If `dotnet run` complains that the port is already in use, you may have another instance of the server running in the background. Ensure you've pressed `Ctrl + C` in any other open terminals, or restart your terminal.
-- **Frontend changes not showing:** If you edit any `.ts` files in the `src/` folder, you MUST run `npx tsc` again before running `dotnet run` so that the updated JavaScript is copied to the `wwwroot/` folder.
-- **Speeds seem impossibly fast:** If you test against the "Local ASP.NET Server" on the same computer hosting the server, you are measuring your computer's internal loopback speed. This can easily reach multiple Gigabits per second. To test your real internet speed, switch the dropdown to Cloudflare.
+- **ASP.NET option disabled:** the `/api/health` endpoint is not accessible. Use `dotnet run` and open the URL it prints.
+- **Download/Upload returns 429:** too many requests from this client IP; slow or stop repeated testing.
+- **Upload returns 413:** exceeds the 8 MiB request cap.
+- **Unrealistically high local speeds:** you are measuring the loopback path rather than your Internet connection.
+- **Frontend changes not visible:** run `npm run build`, refresh the page, and check service-worker caching.
+- **Tests failing:** inspect [Release Candidate CI](https://github.com/sanskarIN/SpeedPulse/actions/workflows/ci.yml); an automated HTTP smoke test covers the published .NET app.
+
+Speed results are estimates. The browser's failed-HTTP-request percentage is not a true network packet-loss measurement.
