@@ -29,7 +29,11 @@ function initDevConsole() {
         const now = new Date();
         const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}.${now.getMilliseconds().toString().padStart(3, "0")}`;
 
-        div.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+        const stamp = document.createElement("span");
+        stamp.className = "log-time";
+        stamp.textContent = "[" + time + "] ";
+        div.append(stamp, document.createTextNode(String(message).slice(0, 800)));
+        while (logContainer.children.length > 300) logContainer.firstChild.remove();
         logContainer.appendChild(div);
         logContainer.scrollTop = logContainer.scrollHeight;
     }
@@ -137,9 +141,11 @@ function initAdvancedDevControls() {
     document
         .getElementById("dev-clear-storage")
         ?.addEventListener("click", () => {
-            if (confirm("WARNING: Nuking localStorage. Proceed?")) {
-                localStorage.clear();
-                console.error("[STORAGE] LocalStorage destroyed.");
+            if (confirm("Clear SpeedPulse-prefixed browser settings only?")) {
+                const appKeys = Object.keys(localStorage).filter((key) =>
+                    key.startsWith("speedpulse_") || key.startsWith("speedpulse-"));
+                appKeys.forEach((key) => localStorage.removeItem(key));
+                console.info("[STORAGE] Removed " + appKeys.length + " SpeedPulse preference keys.");
                 saveSettings();
                 refreshStateInspector();
             }
@@ -148,7 +154,8 @@ function initAdvancedDevControls() {
     document.getElementById("dev-clear-sw")?.addEventListener("click", () => {
         if ("serviceWorker" in navigator) {
             navigator.serviceWorker.getRegistrations().then((regs) => {
-                regs.forEach((r) => r.unregister());
+                regs.filter((r) => r.scope === new URL("./", location.href).href)
+                    .forEach((r) => r.unregister());
                 console.warn("[SW] Terminated all Service Workers.");
             });
         }
@@ -161,8 +168,8 @@ function initAdvancedDevControls() {
     document
         .getElementById("dev-stress-confetti")
         ?.addEventListener("click", () => {
-            console.warn("[GPU] Initiating 10,000 particle stress test...");
-            spawnStressConfetti(10000);
+            console.warn("[GPU] Initiating bounded 300-particle animation test...");
+            spawnStressConfetti(300);
         });
 
     document.getElementById("dev-crash-webgl")?.addEventListener("click", () => {
@@ -318,7 +325,7 @@ function initExtremeFeatures() {
         .getElementById("dev-trigger-memory-leak")
         ?.addEventListener("click", () => {
             console.error(
-                "[MEMORY] Simulating fatal V8 Engine Memory Leak threshold exceeded. Heap size > 1.2GB.",
+                "[MEMORY] Simulation only: no memory allocation or leak was performed.",
             );
         });
 
@@ -354,7 +361,7 @@ document.addEventListener("DOMContentLoaded", () => {
         outage503.addEventListener("change", () => {
             if (outage503.checked)
                 console.error(
-                    "[DOOMSDAY] Global HTTP 503 Outage Simulation ENGAGED. All pipeline fetch requests will artificially collapse.",
+                    "[DOOMSDAY] Simulation toggle only; real fetch requests are unaffected.",
                 );
             else console.info("[DOOMSDAY] Outage simulation disengaged.");
         });
@@ -363,24 +370,24 @@ document.addEventListener("DOMContentLoaded", () => {
         corsFail.addEventListener("change", () => {
             if (corsFail.checked)
                 console.warn(
-                    "[SECURITY] CORS Preflight strictly blocked. Simulating Origin failure.",
+                    "[SECURITY] Simulation toggle only; real browser CORS rules are unchanged.",
                 );
         });
 
     document.getElementById("dev-nuke-cdn")?.addEventListener("click", () => {
         console.error(
-            "[CRITICAL] CDN Edge Nodes forcefully unmapped from internal DNS lookup table. Traffic blackholed.",
+            "[CRITICAL] Demo only; DNS and CDN routes are not changed.",
         );
     });
 
     document.getElementById("dev-reroute-bgp")?.addEventListener("click", () => {
         console.info(
-            "[BGP] Calculating alternative network trajectory via internal routing table...",
+            "[BGP] Demo only; this page does not control BGP routing.",
         );
         setTimeout(
             () =>
                 console.info(
-                    "[BGP] Trajectory stabilized. Edge node re-acquired via secondary ISP link.",
+                    "[BGP] Demo complete: no actual ISP routing changed.",
                 ),
             1500,
         );
@@ -419,11 +426,11 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!("caches" in window)) return;
             const cacheKeys = await caches.keys();
             for (let key of cacheKeys) {
-                await caches.delete(key);
+                if (key.startsWith("speedpulse-")) await caches.delete(key);
             }
             if (cacheInspector)
-                cacheInspector.textContent = "All caches strictly purged.";
-            console.warn("[CACHE API] Completely purged Service Worker storage.");
+                cacheInspector.textContent = "SpeedPulse caches removed; other caches retained.";
+            console.warn("[CACHE API] Removed only SpeedPulse-owned cache entries.");
         });
 
     document
