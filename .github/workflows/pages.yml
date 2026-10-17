@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'main-files/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -38,6 +42,8 @@ jobs:
           done
           node --check main-files/bundle.js
           node --check main-files/bundle-dev.js
+          node --check main-files/sw.js
+          node --test tests/site.test.cjs
       - name: Set up GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload static site
