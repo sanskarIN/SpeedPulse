@@ -30,7 +30,8 @@ This checklist separates *automated evidence* from checks that still need real d
 - [ ] Cloudflare speed tests complete successfully for download and upload on at least one real network. Confirm remote endpoint CORS/availability and check plausible results.
 - [ ] ASP.NET: run `dotnet run` and confirm the selector enables Local ASP.NET after a successful `/api/health` request; check local loopback speed clearly differs from ISP speed.
 - [ ] Interrupt tests mid-download and mid-upload; verify no completed result is saved after cancellation.
-- [ ] Results history, CSV export, themes, developer page, and screenshot sharing still work.
+- [ ] Results history, CSV export, themes and screenshot sharing still work.
+- [ ] Developer Labs loads quickly, shows ASP.NET health status, supports diagnostic cancellation and JSON export, and labels synthetic settings as previews only.
 - [ ] Keyboard accessibility, light/dark contrast, mobile layout, PWA install and service-worker refresh.
 - [ ] Privacy/third-party endpoint disclosures accurately reflect observed browser requests.
 
