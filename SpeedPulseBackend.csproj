@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-
+  <ItemGroup>
+    <!-- Keep the same site available to GitHub Pages and to ASP.NET Core. -->
+    <Content Include="main-files/**/*" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
