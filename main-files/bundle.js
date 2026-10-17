@@ -341,6 +341,7 @@
       var progDown = document.getElementById("prog-down");
       var progUp = document.getElementById("prog-up");
       var isTesting = false;
+      var testGeneration = 0;
       var currentPhase = "idle";
       var speedChart = null;
       var chartDataDown = [];
@@ -474,6 +475,12 @@
       async function startTest() {
         if (isTesting) return;
         isTesting = true;
+          const runId = ++testGeneration;
+          const ensureActive = () => {
+            if (!isTesting || runId !== testGeneration) {
+              throw new DOMException("Speed test cancelled", "AbortError");
+            }
+          };
         startBtn.classList.add("hidden");
         stopBtn.classList.remove("hidden");
         shareBtn.classList.add("hidden");
@@ -495,8 +502,10 @@
           setGaugePhase("Finding Optimal Server...");
           gaugeSpeed.textContent = "...";
           await new Promise((resolve) => setTimeout(resolve, 800));
+          ensureActive();
           setGaugePhase("Connecting...");
           await new Promise((resolve) => setTimeout(resolve, 800));
+          ensureActive();
           setGaugePhase("Ping Test");
           gaugeSpeed.textContent = "...";
           const { ping, jitter, packetLoss } = await runPingTest(server, (p) => {
@@ -506,6 +515,7 @@
           valJitter.textContent = Math.round(jitter).toString();
           finalResult.ping = ping;
           finalResult.jitter = jitter;
+          ensureActive();
           setGaugePhase("Download Test");
           let currentDown = 0;
           const finalDown = await runDownloadTest(server, (mbps) => {
@@ -519,6 +529,7 @@
           finalResult.download = finalDown;
           updateGauge(0);
           await new Promise((r) => setTimeout(r, 500));
+          ensureActive();
           setGaugePhase("Upload Test");
           let currentUp = 0;
           const finalUp = await runUploadTest(server, (mbps) => {
@@ -530,6 +541,7 @@
           valUp.textContent = formatSpeed(finalUp, document.getElementById("unit-select").value);
           progUp.style.width = "100%";
           finalResult.upload = finalUp;
+          ensureActive();
           setGaugePhase("Finished");
           updateGauge(finalDown);
           const gradeObj = calculateGrade(finalDown, finalUp, ping);
@@ -553,6 +565,7 @@
             fireConfetti();
           }
         } catch (e) {
+          if (runId !== testGeneration) return;
           if (e.name !== "AbortError") {
             console.error(e);
             setGaugePhase("Error");
@@ -561,6 +574,7 @@
             setGaugePhase("Aborted");
           }
         } finally {
+          if (runId !== testGeneration) return;
           isTesting = false;
           startBtn.classList.remove("hidden");
           startBtn.textContent = "Retry Test";
@@ -570,12 +584,14 @@
       }
       function stopCurrentTest() {
         if (!isTesting) return;
+        testGeneration += 1;
         abortTest();
         isTesting = false;
         setGaugePhase("Aborted");
         updateGauge(0);
         startBtn.classList.remove("hidden");
         stopBtn.classList.add("hidden");
+        shareBtn.classList.add("hidden");
       }
       async function fetchConnectionDetails() {
         try {
