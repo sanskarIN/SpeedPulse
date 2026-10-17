@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Keep the same site available to GitHub Pages and to ASP.NET Core. -->
+    <Content Remove="main-files/**/*" />
     <Content Include="main-files/**/*" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
