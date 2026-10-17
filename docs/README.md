@@ -1,9 +1,9 @@
-# SpeedPulse Exhaustive Documentation
+# SpeedPulse Technical Documentation
 
 Welcome to the official, extended documentation for **SpeedPulse**, an advanced Internet Speed Checker project designed for high-fidelity network diagnostics.
-Official Repository: [https://github.com/Sanskar-in/SpeedPulse](https://github.com/Sanskar-in/SpeedPulse)
+Official Repository: [https://github.com/sanskarIN/SpeedPulse](https://github.com/sanskarIN/SpeedPulse)
 
-This directory contains in-depth architectural overviews, API references, configuration guides, and implementation details for every major sub-system in the SpeedPulse stack.
+This directory collects design notes and longer guides. The deployed static application is under `main-files/`, while the optional .NET backend is implemented in `Program.cs`. Treat historical architecture proposals as reference material; check the source code for the current supported behavior.
 
 ## Complete Directory Structure
 
@@ -37,4 +37,4 @@ This directory contains in-depth architectural overviews, API references, config
 
 
 ---
-*Generated automatically for the SpeedPulse project to ensure the highest standards of project documentation.*
+*These guides may describe proposed or experimental features. The root README and implementation are the authoritative sources for supported behavior.*
