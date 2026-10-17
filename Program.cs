@@ -1,76 +1,163 @@
-// Program.cs
-// -----------------------------------------------------------------------------------
-// Sanskar. The open source internet speed checker madded and powered by the Sanskar.
-// -----------------------------------------------------------------------------------
-using System.IO.Pipelines;
+// SpeedPulse ASP.NET Core backend. Serves the same frontend as GitHub Pages,
+// plus bounded same-origin endpoints for local/LAN speed measurement.
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 
-var builder = WebApplication.CreateBuilder(args);
+const int mib = 1024 * 1024;
+const int defaultDownloadBytes = 25 * mib;
+const int maxDownloadBytes = 64 * mib;
+const int maxUploadBytes = 8 * mib;
 
-// Ensure we allow serving static files (our frontend)
-builder.Services.AddCors(options =>
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-    });
+    Args = args,
+    WebRootPath = "main-files"
+});
+
+// No wildcard CORS: the web UI and /api routes share an origin in self-hosted mode.
+// This is a demo test server: use access controls when exposing it beyond a trusted LAN.
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = maxUploadBytes;
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("speed-test", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 });
 
 var app = builder.Build();
 
-app.UseCors();
-
-// Enable serving files from wwwroot
-app.UseDefaultFiles(); // Serves index.html
+app.UseRouting();
+app.UseRateLimiter();
+app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.MapGet("/api/down", async (HttpContext context) =>
+app.MapGet("/api/health", (HttpContext context) =>
 {
-    // Provide a file to download for speed testing.
-    var bytesQuery = context.Request.Query["bytes"];
-    int bytes = 25 * 1024 * 1024; // Default 25 MB
-
-    if (int.TryParse(bytesQuery, out int requestedBytes))
+    SetNoStore(context.Response);
+    return Results.Ok(new
     {
-        bytes = requestedBytes;
+        status = "ok",
+        service = "SpeedPulseBackend",
+        version = "1.0.0",
+        mode = "self-hosted"
+    });
+});
+
+app.MapGet("/api/config", (HttpContext context) =>
+{
+    SetNoStore(context.Response);
+    return Results.Ok(new
+    {
+        defaultDownloadBytes,
+        maxDownloadBytes,
+        maxUploadBytes,
+        rateLimitRequestsPerMinute = 60
+    });
+});
+
+app.MapMethods("/api/down", new[] { "GET", "HEAD" }, async (HttpContext context) =>
+{
+    SetNoStore(context.Response);
+    var value = context.Request.Query["bytes"];
+    int bytes = defaultDownloadBytes;
+
+    if (!string.IsNullOrEmpty(value))
+    {
+        if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out bytes)
+            || bytes < 0 || bytes > maxDownloadBytes)
+        {
+            return Results.BadRequest(new
+            {
+                error = $"bytes must be an integer between 0 and {maxDownloadBytes}"
+            });
+        }
     }
 
     context.Response.ContentType = "application/octet-stream";
+    context.Response.ContentLength = bytes;
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
 
-    // We send a continuous stream of random bytes.
-    // Instead of allocating a huge array, we allocate a 1MB buffer and loop.
-    // A larger buffer reduces the async overhead and significantly increases throughput.
-    var buffer = new byte[1024 * 1024]; // 1 MB chunk
-    new Random().NextBytes(buffer);
+    // A HEAD probe returns the same headers, without transferring a payload.
+    if (HttpMethods.IsHead(context.Request.Method) || bytes == 0)
+        return Results.Empty;
 
-    int sent = 0;
-    while (sent < bytes)
+    var buffer = new byte[mib];
+    RandomNumberGenerator.Fill(buffer);
+
+    try
     {
-        // If client disconnected, stop
-        if (context.RequestAborted.IsCancellationRequested) break;
-
-        int toSend = Math.Min(buffer.Length, bytes - sent);
-        await context.Response.BodyWriter.WriteAsync(new ReadOnlyMemory<byte>(buffer, 0, toSend), context.RequestAborted);
-        sent += toSend;
+        var remaining = bytes;
+        while (remaining > 0)
+        {
+            var count = Math.Min(remaining, buffer.Length);
+            await context.Response.Body.WriteAsync(buffer.AsMemory(0, count),
+                context.RequestAborted);
+            remaining -= count;
+        }
     }
-});
+    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+    {
+        // The browser cancelled the test. Do not keep producing traffic.
+    }
+
+    return Results.Empty;
+}).RequireRateLimiting("speed-test");
 
 app.MapPost("/api/up", async (HttpContext context) =>
 {
-    // Consume the incoming upload request as fast as possible to measure upload speed.
-    var buffer = new byte[64 * 1024];
-    long totalRead = 0;
-    int read;
+    SetNoStore(context.Response);
+    if (context.Request.ContentLength is > maxUploadBytes)
+        return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
 
-    while ((read = await context.Request.Body.ReadAsync(buffer, 0, buffer.Length)) > 0)
+    var buffer = new byte[64 * 1024];
+    long received = 0;
+
+    try
     {
-        totalRead += read;
+        while (true)
+        {
+            // Read at most one byte beyond the configured cap, even with chunked bodies.
+            var count = (int)Math.Min(buffer.Length, maxUploadBytes - received + 1);
+            var read = await context.Request.Body.ReadAsync(buffer.AsMemory(0, count),
+                context.RequestAborted);
+            if (read == 0) break;
+            received += read;
+            if (received > maxUploadBytes)
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        }
+    }
+    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+    {
+        return Results.Empty;
     }
 
-    return Results.Ok(new { message = "Upload received successfully", bytesReceived = totalRead });
-});
+    return Results.Ok(new { bytesReceived = received });
+}).RequireRateLimiting("speed-test");
 
-// Fallback for SPA
+// Missing API paths must be 404, not the web app HTML fallback.
+app.MapFallback("/api/{**path}", () => Results.NotFound(new
+{
+    error = "Unknown API endpoint"
+}));
 app.MapFallbackToFile("index.html");
 
 app.Run();
-// The code ends here.
+
+static void SetNoStore(HttpResponse response)
+{
+    response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+    response.Headers.Pragma = "no-cache";
+}
