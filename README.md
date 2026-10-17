@@ -2,7 +2,7 @@
 
 **Open-source internet speed testing in the browser, with an optional ASP.NET Core backend.**
 
-[Live site](https://sanskarin.github.io/SpeedPulse/) · [Source code](https://github.com/sanskarIN/SpeedPulse) · [Report an issue](https://github.com/sanskarIN/SpeedPulse/issues) · [Contact](https://sanskarin.github.io/contact)
+[Website (after Pages activation)](https://sanskarin.github.io/SpeedPulse/) · [Source code](https://github.com/sanskarIN/SpeedPulse) · [Report an issue](https://github.com/sanskarIN/SpeedPulse/issues) · [Contact](https://sanskarin.github.io/contact)
 
 SpeedPulse provides a responsive speed-test dashboard with latency, download, upload, results history, charts, theming, and share/export tools. It offers two distinct ways to run:
 
@@ -100,6 +100,9 @@ Browser history/preferences are stored locally. Speed tests contact Cloudflare; 
 All third-party service availability and browser CORS rules can affect results. The project does not promise accurate packet-level diagnostics, a particular throughput, or offline speed-test functionality.
 
 ## Project links
+
+The [complete URL and external-service inventory](./docs/links.md) identifies each network endpoint, dependency, project URL and support channel.
+
 
 - [Repository](https://github.com/sanskarIN/SpeedPulse) · [Issues](https://github.com/sanskarIN/SpeedPulse/issues)
 - [Creator's GitHub](https://github.com/sanskarIN) · [Website](https://sanskarin.github.io)
