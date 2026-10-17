@@ -458,3 +458,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 50);
 });
 // The code ends here.
+
+
+// Load maintained diagnostics without modifying the large legacy HTML file.
+// Kept in the TypeScript entry point so npm run build:labs retains this panel.
+(function () {
+    if (document.querySelector('script[data-speedpulse-diagnostics]')) return;
+    const script = document.createElement('script');
+    script.src = 'dev-diagnostics.js';
+    script.defer = true;
+    script.dataset.speedpulseDiagnostics = 'true';
+    document.head.appendChild(script);
+})();
