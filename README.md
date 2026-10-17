@@ -57,15 +57,15 @@ run.md                  # Longer local development guide
 git clone https://github.com/sanskarIN/SpeedPulse.git
 cd SpeedPulse
 npm ci
-dotnet run
 ```
 
-Open the URL shown in the ASP.NET Core terminal. The repository includes prebuilt browser assets in `main-files/`; however, ASP.NET Core expects files under `wwwroot/`. For a local backend run, first copy the static frontend into `wwwroot/`:
+The repository includes prebuilt browser assets in `main-files/`, but the ASP.NET Core backend serves files from `wwwroot/`. Copy the assets before starting the backend:
 
 ```bash
 # macOS / Linux
 mkdir -p wwwroot
 cp -R main-files/. wwwroot/
+dotnet run
 ```
 
 On Windows PowerShell:
@@ -76,7 +76,7 @@ Copy-Item main-files/* wwwroot/ -Recurse -Force
 dotnet run
 ```
 
-Run `dotnet run` **after** populating `wwwroot/`; the first command block lists dependency preparation, but serving the UI requires this copy. Use **Local ASP.NET Server** for the self-hosted endpoints or **Cloudflare Global CDN** to test over the public internet. The local option can test only the link to the machine hosting the backend. Edit TypeScript under `src/`, and rebuild the browser bundle before deploying source changes.
+Open the URL shown by `dotnet run` in your terminal. Use **Local ASP.NET Server** for the self-hosted endpoints or **Cloudflare Global CDN** to test over the public internet. The local option can test only the link to the machine hosting the backend. Edit TypeScript under `src/`, then run `npm run build` to rebuild the browser bundles before committing source changes. Run `npm test` to validate the deployable static assets.
 
 ### Local API
 
