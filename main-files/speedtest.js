@@ -20,7 +20,7 @@ export function abortTest() {
     }
 }
 // 1. Ping Test
-export async function runPingTest(server = 'auto', onProgress) {
+export async function runPingTest(server = 'cloudflare', onProgress) {
     controller = new AbortController();
     const target = ENDPOINTS[server].down;
     const iterations = 10;
@@ -59,7 +59,7 @@ export async function runPingTest(server = 'auto', onProgress) {
     return { ping: avgPing, jitter, packetLoss };
 }
 // 2. Download Test
-export async function runDownloadTest(server = 'auto', onProgress) {
+export async function runDownloadTest(server = 'cloudflare', onProgress) {
     controller = new AbortController();
     const target = ENDPOINTS[server].down;
     // Request 25MB chunk
@@ -93,44 +93,23 @@ export async function runDownloadTest(server = 'auto', onProgress) {
     return totalDurationSec > 0 ? (loadedBytes * 8) / (1024 * 1024) / totalDurationSec : 0;
 }
 // 3. Upload Test
-export async function runUploadTest(server = 'auto', onProgress) {
+export async function runUploadTest(server = 'cloudflare', onProgress) {
     controller = new AbortController();
     const target = ENDPOINTS[server].up;
-    // Generate random 5MB payload
+    // Fetch doesn't expose upload byte progress. Report only a completed, checked result.
     const payloadSize = 5 * 1024 * 1024;
     const buffer = new Uint8Array(payloadSize);
-    for (let i = 0; i < payloadSize; i++) {
-        buffer[i] = Math.random() * 255;
-    }
-    const blob = new Blob([buffer], { type: 'text/plain' });
-    return new Promise(async (resolve, reject) => {
-        let startTime = performance.now();
-        // Fake progress since fetch no-cors doesn't give us upload progress
-        let fakeProgressTimer = setInterval(() => {
-            const currentDuration = (performance.now() - startTime) / 1000;
-            // Guess a speed
-            const estimatedMbps = (payloadSize * 0.5 * 8) / (1024 * 1024) / currentDuration;
-            onProgress(estimatedMbps > 0 ? estimatedMbps : 0);
-        }, 500);
-        try {
-            // Using a simple POST with Blob of text/plain type
-            // This prevents the browser from sending a CORS preflight OPTIONS request
-            const response = await fetch(target, {
-                method: 'POST',
-                body: blob,
-                mode: "cors",
-                signal: controller.signal
-            });
-            if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
-            clearInterval(fakeProgressTimer);
-            const durationSec = (performance.now() - startTime) / 1000;
-            const finalMbps = (payloadSize * 8) / (1024 * 1024) / durationSec;
-            onProgress(finalMbps);
-            resolve(finalMbps);
-        }
-        catch (e) {
-            clearInterval(fakeProgressTimer);
-            reject(e);
-        }
+    for (let i = 0; i < payloadSize; i++) buffer[i] = Math.random() * 255;
+    const start = performance.now();
+    const response = await fetch(target, {
+        method: 'POST',
+        body: new Blob([buffer], { type: 'text/plain' }),
+        mode: 'cors',
+        signal: controller.signal
     });
+    if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
+    const durationSec = (performance.now() - start) / 1000;
+    const measuredMbps = durationSec > 0 ? (payloadSize * 8) / (1024 * 1024) / durationSec : 0;
+    onProgress(measuredMbps);
+    return measuredMbps;
 }
