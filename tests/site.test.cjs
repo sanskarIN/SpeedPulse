@@ -8,7 +8,7 @@ const read = name => fs.readFileSync(path.join(site, name), 'utf8');
 
 test('static site includes its required entry points', () => {
   for (const file of ['index.html', 'about.html', 'support.html', 'privacy.html', 'terms.html',
-    '404.html', 'styles.css', 'bundle.js', 'bundle-dev.js', 'sw.js', 'manifest.json', 'favicon.png']) {
+    '404.html', 'styles.css', 'bundle.js', 'bundle-dev.js', 'backend-status.js', 'sw.js', 'manifest.json', 'favicon.png']) {
     assert.ok(fs.statSync(path.join(site, file)).size > 0, file + ' is missing or empty');
   }
 });
@@ -16,7 +16,9 @@ test('static site includes its required entry points', () => {
 test('homepage defaults to the remote endpoint for static hosting', () => {
   const html = read('index.html');
   assert.match(html, /value="cloudflare" selected/);
-  assert.match(html, /hostname\.endsWith\('\.github\.io'\)/);
+  assert.match(html, /src="backend-status\.js" defer/);
+  assert.match(read('backend-status.js'), /hostname\.endsWith\('\.github\.io'\)/);
+  assert.match(read('backend-status.js'), /fetch\('\/api\/health'/);
   assert.match(html, /src="bundle\.js"/);
 });
 
