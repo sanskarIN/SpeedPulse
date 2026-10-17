@@ -295,8 +295,8 @@
     const headers = ["Date", "Download (Mbps)", "Upload (Mbps)", "Ping (ms)", "Jitter (ms)", "ISP"];
     const rows = history.map((item) => [
       new Date(item.date).toLocaleString(),
-      item.download?.toFixed(2) || "0",
-      item.upload?.toFixed(2) || "0",
+      Number.isFinite(item.download) ? item.download.toFixed(2) : '--',
+      Number.isFinite(item.upload) ? item.upload.toFixed(2) : '--',
       Math.round(item.ping || 0),
       Math.round(item.jitter || 0),
       `"${item.isp || "Unknown"}"`
@@ -497,7 +497,7 @@
         document.getElementById("overall-grade").textContent = "-";
         document.getElementById("grade-desc").textContent = "Testing in progress...";
         document.querySelectorAll(".status-indicator").forEach((el) => el.className = "status-indicator");
-        playSound("start");
+        try { playSound('start'); } catch (error) { console.warn('Audio notification skipped:', error); }
         const server = document.getElementById("server-select").value;
         const finalResult = { isp: document.getElementById("info-isp").textContent };
         try {
@@ -672,11 +672,11 @@
           const tdDate = document.createElement("td");
           tdDate.textContent = new Date(item.date).toLocaleDateString() + " " + new Date(item.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           const tdDown = document.createElement("td");
-          tdDown.innerHTML = `<strong class="highlight-down">${item.download?.toFixed(2) || "0"}</strong>`;
+          tdDown.innerHTML = `<strong class="highlight-down">${Number.isFinite(item.download) ? item.download.toFixed(2) : '--'}</strong>`;
           const tdUp = document.createElement("td");
-          tdUp.innerHTML = `<strong class="highlight-up">${item.upload?.toFixed(2) || "0"}</strong>`;
+          tdUp.innerHTML = `<strong class="highlight-up">${Number.isFinite(item.upload) ? item.upload.toFixed(2) : '--'}</strong>`;
           const tdPing = document.createElement("td");
-          tdPing.textContent = Math.round(item.ping || 0).toString() + " ms";
+          tdPing.textContent = Number.isFinite(item.ping) ? Math.round(item.ping) + ' ms' : '--';
           const tdISP = document.createElement("td");
           tdISP.textContent = item.isp || "Unknown";
           tr.append(tdCheck, tdDate, tdDown, tdUp, tdPing, tdISP);
