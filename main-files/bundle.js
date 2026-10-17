@@ -154,7 +154,7 @@
       controller = null;
     }
   }
-  async function runPingTest(server = "local", onProgress) {
+  async function runPingTest(server = 'cloudflare', onProgress) {
     if (server === "local" && isFileProtocol) server = "cloudflare";
     controller = new AbortController();
     const target = ENDPOINTS[server].down;
@@ -189,7 +189,7 @@
     const packetLoss = failed / iterations * 100;
     return { ping: avgPing, jitter, packetLoss };
   }
-  async function runDownloadTest(server = "local", onProgress) {
+  async function runDownloadTest(server = 'cloudflare', onProgress) {
     if (server === "local" && isFileProtocol) server = "cloudflare";
     controller = new AbortController();
     const target = ENDPOINTS[server].down;
@@ -218,41 +218,26 @@
     const totalDurationSec = (performance.now() - startTime) / 1e3;
     return totalDurationSec > 0 ? loadedBytes * 8 / (1024 * 1024) / totalDurationSec : 0;
   }
-  async function runUploadTest(server = "local", onProgress) {
+  async function runUploadTest(server = "cloudflare", onProgress) {
     if (server === "local" && isFileProtocol) server = "cloudflare";
     controller = new AbortController();
     const target = ENDPOINTS[server].up;
+    // Fetch does not expose upload byte progress; do not fabricate live measurements.
     const payloadSize = 5 * 1024 * 1024;
     const buffer = new Uint8Array(payloadSize);
-    for (let i = 0; i < payloadSize; i++) {
-      buffer[i] = Math.random() * 255;
-    }
-    const blob = new Blob([buffer], { type: "text/plain" });
-    return new Promise(async (resolve, reject) => {
-      let startTime = performance.now();
-      let fakeProgressTimer = setInterval(() => {
-        const currentDuration = (performance.now() - startTime) / 1e3;
-        const estimatedMbps = payloadSize * 0.5 * 8 / (1024 * 1024) / currentDuration;
-        onProgress(estimatedMbps > 0 ? estimatedMbps : 0);
-      }, 500);
-      try {
-        const response = await fetch(target, {
-          method: "POST",
-          body: blob,
-          mode: "cors",
-          signal: controller.signal
-        });
-            if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
-        clearInterval(fakeProgressTimer);
-        const durationSec = (performance.now() - startTime) / 1e3;
-        const finalMbps = payloadSize * 8 / (1024 * 1024) / durationSec;
-        onProgress(finalMbps);
-        resolve(finalMbps);
-      } catch (e) {
-        clearInterval(fakeProgressTimer);
-        reject(e);
-      }
+    for (let i = 0; i < payloadSize; i++) buffer[i] = Math.random() * 255;
+    const start = performance.now();
+    const response = await fetch(target, {
+      method: "POST",
+      body: new Blob([buffer], { type: "text/plain" }),
+      mode: "cors",
+      signal: controller.signal
     });
+    if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
+    const durationSec = (performance.now() - start) / 1e3;
+    const measuredMbps = durationSec > 0 ? payloadSize * 8 / (1024 * 1024) / durationSec : 0;
+    onProgress(measuredMbps);
+    return measuredMbps;
   }
   var ENDPOINTS, isFileProtocol, controller;
   var init_speedtest = __esm({
