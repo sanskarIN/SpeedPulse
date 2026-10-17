@@ -113,9 +113,13 @@ The [complete URL and external-service inventory](./docs/links.md) identifies ea
 - [Contact](https://sanskarin.github.io/contact) · [X](https://x.com/SanskarCodes) · [LinkedIn](https://linkedin.com/in/SanskarCodes)
 - Support development: [Buy Me a Coffee](https://buymeacoffee.com/SanskarCodes) · [Razorpay](https://razorpay.me/@SanskarCodes) · [PayPal.Me](https://paypal.me/SanskarCodes)
 
-## Release candidate checks
+## Stable release — v1.0.0
 
-[Release Candidate CI](https://github.com/sanskarIN/SpeedPulse/actions/workflows/ci.yml) runs browser tests, a frontend build, an ASP.NET Core 10 build/publish, and HTTP smoke tests for the API. Review [the v1.0.0 checklist](./docs/release-readiness.md) before tagging or publishing a release. **No v1.0.0 GitHub release has been published as part of this preparation.**
+**[Download SpeedPulse v1.0.0](https://github.com/sanskarIN/SpeedPulse/releases/tag/v1.0.0)** (October 17, 2026). The first stable release includes the corrected upload test, a fixed bandwidth chart, Developer Labs, and a self-hosted ASP.NET Core 10 backend. Download archives are available for Windows x64, Linux x64, Apple Silicon macOS, and static web hosting.
+
+[Release validation CI](https://github.com/sanskarIN/SpeedPulse/actions/workflows/ci.yml) runs browser tests, frontend builds, .NET 10 builds and HTTP smoke tests. Additional manual browser and connection testing remains valuable; see the [release checklist](./docs/release-readiness.md).
+
+**Measurement note:** If a third-party upload endpoint fails, completed measurements are kept and the upload is shown as unavailable. SpeedPulse never treats a missing result as zero.
 
 ## Contributing
 
