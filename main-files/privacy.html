@@ -260,9 +260,10 @@
             <p style="margin-bottom: 2rem; font-style: italic;">Last updated: May 2026</p>
 
             <h3>1. Data Collection</h3>
-            <p>SpeedPulse operates entirely client-side. We do not store, process, or transmit your speed test results
-                to any centralized server owned by SpeedPulse. All historical test data is saved locally in your
-                browser's <code>localStorage</code>.</p>
+            <p>On GitHub Pages, SpeedPulse stores result history in your browser's <code>localStorage</code>
+                rather than in a SpeedPulse-owned central database. Network tests contact the remote providers
+                described below. If you run the optional self-hosted .NET backend, that server receives test
+                requests and may record request metadata depending on your hosting configuration.</p>
 
             <h3>2. Third-Party Services</h3>
             <p>To accurately measure your internet connection, SpeedPulse communicates with public third-party
