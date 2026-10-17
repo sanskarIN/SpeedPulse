@@ -1,0 +1,53 @@
+name: Release Candidate CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Browser assets and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Validate built bundles
+        run: |
+          node --check main-files/bundle.js
+          node --check main-files/bundle-dev.js
+          node --check main-files/backend-status.js
+          node --check main-files/sw.js
+
+  backend:
+    name: ASP.NET Core build and HTTP smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore and compile
+        run: |
+          dotnet restore SpeedPulseBackend.csproj
+          dotnet build SpeedPulseBackend.csproj -c Release --no-restore
+          dotnet publish SpeedPulseBackend.csproj -c Release --no-build -o ./publish
+      - name: Validate publish output
+        run: |
+          test -s publish/SpeedPulseBackend.dll
+          test -s publish/main-files/index.html
+          test -s publish/main-files/bundle.js
+      - name: Exercise ASP.NET HTTP endpoints
+        shell: bash
+        run: bash scripts/smoke-backend.sh
