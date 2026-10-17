@@ -432,11 +432,8 @@
         }
       }
       function addChartPoint(val, isDown) {
-        const basePing = 15;
-        const jitter = Math.random() * 5;
-        const loadPing = basePing + jitter + (val > 0 ? 100 / val : 0);
-        updateLatencyPoint(loadPing);
-        if (!speedChart) return;
+    // Chart actual download/upload samples only. Do not invent latency readings.
+    if (!speedChart) return;
         const now = (/* @__PURE__ */ new Date()).toLocaleTimeString();
         chartLabels.push(now);
         if (isDown) {
