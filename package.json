@@ -4,7 +4,7 @@
   "description": "SpeedPulse is a browser-based internet speed tester with an optional ASP.NET Core backend.",
   "main": "index.js",
   "scripts": {
-    "test": "node --test tests/site.test.cjs",
+    "test": "node --test",
     "check:site": "npm test",
     "build:app": "esbuild src/script.ts --bundle --platform=browser --target=es2020 --outfile=main-files/bundle.js",
     "build:labs": "esbuild src/developer.ts --bundle --platform=browser --target=es2020 --outfile=main-files/bundle-dev.js",
