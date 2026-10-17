@@ -8,7 +8,8 @@
     "check:site": "npm test",
     "build:app": "esbuild src/script.ts --bundle --platform=browser --target=es2020 --outfile=main-files/bundle.js",
     "build:labs": "esbuild src/developer.ts --bundle --platform=browser --target=es2020 --outfile=main-files/bundle-dev.js",
-    "build": "npm run build:app && npm run build:labs"
+    "build": "npm run build:app && npm run build:labs && npm run build:diagnostics",
+    "build:diagnostics": "esbuild src/dev-diagnostics.ts --bundle --platform=browser --target=es2020 --outfile=main-files/dev-diagnostics.js"
   },
   "keywords": [],
   "author": "",
