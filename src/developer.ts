@@ -1,5 +1,5 @@
 // developer.ts
-// The project of the open source internet speed checker. (Source available at the GitHub via this link:- https://github.com/Sanskar-in/SpeedPulse)
+// The project of the open source internet speed checker. (Source available at the GitHub via this link:- https://github.com/sanskarIN/SpeedPulse)
 // ------------------------------------------------------------------------------------------------------
 // Developer Options Logic - SpeedPulse PRO LABS
 // ------------------------------------------------------------------------------------------------------
