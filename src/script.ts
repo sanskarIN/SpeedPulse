@@ -6,7 +6,7 @@ declare const Chart: any;
 declare const html2canvas: any;
 
 import { formatSpeed, playSound, calculateGrade, fireConfetti } from './utils.js';
-import { runPingTest, runDownloadTest, runUploadTest, abortTest } from './speedtest.js';
+import { runPingTest, runDownloadTest, runUploadTest, abortTest, explainTestError } from './speedtest.js';
 import { getTestProfile, loadTestProfile, saveTestProfile, effectiveTestBudget } from './test-profiles.js';
 import type { ServerBudgetLimits } from './test-profiles.js';
 import type { SpeedServer } from './speedtest.js';
@@ -220,7 +220,8 @@ async function startTest() {
         ? (window as Window & { speedpulseServerLimits?: ServerBudgetLimits }).speedpulseServerLimits
         : null;
     const budget = effectiveTestBudget(profile, serverLimits);
-    const finalResult: { isp: string | null; profile: string; ping?: number; jitter?: number; download?: number; upload?: number } =
+    let activeStage: 'ping' | 'download' | 'upload' = 'ping';
+    const finalResult: { isp: string | null; profile: string; ping?: number; jitter?: number; packetLoss?: number; download?: number; upload?: number } =
         { isp: document.getElementById('info-isp').textContent, profile: profile.id };
 
     try {
@@ -234,6 +235,7 @@ async function startTest() {
         await new Promise(resolve => setTimeout(resolve, 800));
 
         // Ping
+        activeStage = 'ping';
         ensureActive();
           setGaugePhase('Ping Test');
         gaugeSpeed.textContent = '...';
@@ -244,8 +246,10 @@ async function startTest() {
         valJitter!.textContent = Math.round(jitter).toString();
         finalResult.ping = ping;
         finalResult.jitter = jitter;
+        finalResult.packetLoss = packetLoss; // fraction of failed HTTP probes, not network packet loss
 
         // Download
+        activeStage = 'download';
         ensureActive();
           setGaugePhase('Download Test');
         let currentDown = 0;
@@ -264,6 +268,7 @@ async function startTest() {
         await new Promise(r => setTimeout(r, 500));
 
         // Upload
+        activeStage = 'upload';
         ensureActive();
           setGaugePhase('Upload Test');
         let currentUp = 0;
@@ -281,9 +286,7 @@ async function startTest() {
           finalResult.upload = finalUp;
         } catch (error) {
           if (error && error.name === 'AbortError') throw error;
-          uploadError = server === 'cloudflare'
-            ? 'Cloudflare upload request was unavailable (network, CORS, or HTTP failure).'
-            : 'The local ASP.NET upload endpoint did not respond successfully.';
+          uploadError = explainTestError(error, 'upload', server);
           console.warn('[SpeedPulse] Upload measurement unavailable:', error);
           valUp.textContent = '--';
           progUp.style.width = '0%';
@@ -335,8 +338,7 @@ async function startTest() {
             console.error(e);
             setGaugePhase('Error');
             document.getElementById('grade-desc').textContent =
-          'Could not complete the test: ' + (e instanceof Error ? e.message : 'network request failed') +
-          '. Try again or change servers.';
+                'Could not complete the test: ' + explainTestError(e, activeStage, server);
         } else {
             setGaugePhase('Aborted');
         }
@@ -346,7 +348,8 @@ async function startTest() {
         startBtn.classList.remove('hidden');
         startBtn.textContent = 'Retry Test';
         stopBtn.classList.add('hidden');
-        shareBtn.classList.remove('hidden');
+        if (Number.isFinite(finalResult.download)) shareBtn.classList.remove('hidden');
+        else shareBtn.classList.add('hidden');
     }
 }
 
