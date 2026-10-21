@@ -84,3 +84,13 @@ test('chart works without optional Chart.js CDN', () => {
   exports.clearChart();
   assert.equal(exports.getChartSamples().download.length, 0);
 });
+
+test('upload is plotted as an observed completion marker rather than synthetic samples', () => {
+  const { api } = setup();
+  api.addChartPoint(18.75, false);
+  const samples = api.getChartSamples();
+  assert.equal(samples.upload.length, 1);
+  assert.equal(samples.upload[0], 18.75);
+  assert.equal(samples.download[0], null);
+  assert.match(code, /pointRadius: 4/);
+});
