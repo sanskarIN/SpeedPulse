@@ -24,6 +24,8 @@ jobs:
       - run: npm run typecheck:engine
       - run: npm test
       - run: npm run build
+      - name: Headless Chrome end-to-end smoke
+        run: node scripts/browser-smoke.cjs
       - name: Validate built bundles
         run: |
           node --check main-files/bundle.js
