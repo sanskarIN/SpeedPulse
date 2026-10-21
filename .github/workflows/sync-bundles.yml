@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'tests/**'
       - 'package.json'
       - '.github/workflows/sync-bundles.yml'
   workflow_dispatch:
