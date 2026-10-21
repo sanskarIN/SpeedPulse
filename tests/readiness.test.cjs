@@ -10,9 +10,9 @@ const code = fs.readFileSync(path.join(__dirname, '..', 'src', 'readiness.ts'), 
 const js = ts.transpileModule(code, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
 }).outputText;
-const exports = {};
-vm.runInNewContext(js, { exports, Number });
-const { calculateReadiness, READINESS_ORDER } = exports;
+const moduleExports = {};
+vm.runInNewContext(js, { exports: moduleExports, Number });
+const { calculateReadiness, READINESS_ORDER } = moduleExports;
 
 test('real measured values classify supported readiness hints', () => {
   const result = calculateReadiness({ download: 500, upload: 50, ping: 10, jitter: 2 });
