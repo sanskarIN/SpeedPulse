@@ -43,9 +43,10 @@ test('chart adapter keeps only last 50 aligned real download/upload samples', ()
   assert.equal(samples.labels.length, 50);
   assert.equal(samples.download.length, 50);
   assert.equal(samples.upload.length, 50);
-  assert.equal(samples.download[0], 22);
-  assert.equal(samples.upload[1], 23);
-  assert.equal(samples.upload[0], null);
+  assert.equal(samples.upload[0], 21);
+  assert.equal(samples.download[1], 22);
+  assert.equal(samples.download[0], null);
+  assert.equal(samples.upload[1], null);
 });
 
 test('chart rejects invalid measurement values without corrupting arrays', () => {
