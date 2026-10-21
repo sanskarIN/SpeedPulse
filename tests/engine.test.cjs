@@ -5,8 +5,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // The browser's ESM engine can be exercised without a browser or real network traffic.
-const source = fs.readFileSync(path.join(__dirname, '..', 'main-files', 'speedtest.js'), 'utf8');
-const enginePromise = import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+const ts = require('typescript');
+const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'speedtest.ts'), 'utf8');
+const compiled = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 }
+}).outputText;
+const enginePromise = import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'));
 
 test('latency probes use uncached GET and count failed HTTP samples', async () => {
   const engine = await enginePromise;
@@ -106,5 +110,33 @@ test('bandwidth chart never calls the previously undefined latency function', ()
   for (const code of [src, bundled]) {
     assert.doesNotMatch(code, /updateLatencyPoint\s*\(/);
     assert.match(code, /function addChartPoint\(/);
+  }
+});
+
+test('quick upload honors the selected 1 MiB data budget', async () => {
+  const engine = await enginePromise;
+  const previousFetch = global.fetch;
+  global.fetch = async (url, init) => {
+    assert.equal(url, 'https://speed.cloudflare.com/__up?bytes=1048576');
+    assert.equal(init.body.size, 1048576);
+    return { ok: true, status: 200 };
+  };
+  try {
+    await engine.runUploadTest('cloudflare', () => {}, 1048576);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test('invalid transfer budgets never initiate a request', async () => {
+  const engine = await enginePromise;
+  const previousFetch = global.fetch;
+  global.fetch = () => { throw new Error('A transfer should not start'); };
+  try {
+    await assert.rejects(engine.runDownloadTest('local', () => {}, 0), RangeError);
+    await assert.rejects(engine.runDownloadTest('local', () => {}, 80 * 1024 * 1024), RangeError);
+    await assert.rejects(engine.runUploadTest('local', () => {}, 9 * 1024 * 1024), RangeError);
+  } finally {
+    global.fetch = previousFetch;
   }
 });
