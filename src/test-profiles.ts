@@ -55,3 +55,29 @@ export function saveTestProfile(input: unknown): TestProfile {
     }
     return profile;
 }
+
+export interface TransferBudget {
+    readonly downloadBytes: number;
+    readonly uploadBytes: number;
+}
+
+export interface ServerBudgetLimits {
+    readonly maxDownloadBytes: number;
+    readonly maxUploadBytes: number;
+}
+
+/**
+ * Host limits take priority over the browser's selected profile. This allows
+ * administrators to reduce bandwidth usage without breaking local test mode.
+ */
+export function effectiveTestBudget(profile: TestProfile, limits?: ServerBudgetLimits | null): TransferBudget {
+    if (!limits) return { downloadBytes: profile.downloadBytes, uploadBytes: profile.uploadBytes };
+    const safeDownloadLimit = Number.isSafeInteger(limits.maxDownloadBytes) && limits.maxDownloadBytes >= 1
+        ? limits.maxDownloadBytes : profile.downloadBytes;
+    const safeUploadLimit = Number.isSafeInteger(limits.maxUploadBytes) && limits.maxUploadBytes >= 1
+        ? limits.maxUploadBytes : profile.uploadBytes;
+    return {
+        downloadBytes: Math.min(profile.downloadBytes, safeDownloadLimit),
+        uploadBytes: Math.min(profile.uploadBytes, safeUploadLimit),
+    };
+}
