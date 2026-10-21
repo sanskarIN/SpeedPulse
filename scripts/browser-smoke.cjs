@@ -192,12 +192,14 @@ async function main() {
       down: document.getElementById('val-down')?.textContent,
       up: document.getElementById('val-up')?.textContent,
       progress: Number(document.getElementById('prog-down')?.getAttribute('aria-valuenow')),
+      visibleProgress: document.getElementById('download-progress-label')?.textContent,
       alerts: window.__speedpulseSmoke.alerts,
       errors: window.__speedpulseSmoke.errors,
       requests: window.__speedpulseSmoke.requests,
     }))()`);
     for (const field of ['ping', 'down', 'up']) assert.match(success[field], /\d/);
     assert.equal(success.progress, 100);
+    assert.equal(success.visibleProgress, '100%');
     assert.deepEqual(success.alerts, []);
     assert.deepEqual(success.errors, []);
     assert.ok(success.requests.some(url => url.includes('/__down?bytes=5242880')));
