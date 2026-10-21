@@ -135,7 +135,7 @@ app.MapMethods("/api/down", new[] { "GET", "HEAD" }, async (HttpContext context)
 app.MapPost("/api/up", async (HttpContext context) =>
 {
     SetNoStore(context.Response);
-    if (context.Request.ContentLength is > maxUploadBytes)
+    if (context.Request.ContentLength is long declaredLength && declaredLength > maxUploadBytes)
         return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
 
     var buffer = new byte[64 * 1024];
