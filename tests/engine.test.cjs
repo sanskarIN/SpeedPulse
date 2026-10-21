@@ -104,13 +104,13 @@ test('shipped test flow presents upload failure inline without blocking alert', 
   assert.match(source, /sw\.js\?v=7\.0/);
 });
 
-test('bandwidth chart never calls the previously undefined latency function', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'script.ts'), 'utf8');
-  const bundled = fs.readFileSync(path.join(__dirname, '..', 'main-files', 'bundle.js'), 'utf8');
-  for (const code of [src, bundled]) {
-    assert.doesNotMatch(code, /updateLatencyPoint\s*\(/);
-    assert.match(code, /function addChartPoint\(/);
-  }
+test('chart adapter is a standalone TypeScript module with no fabricated latency data', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'script.ts'), 'utf8');
+  const chart = fs.readFileSync(path.join(__dirname, '..', 'src', 'dashboard-chart.ts'), 'utf8');
+  assert.doesNotMatch(main, /updateLatencyPoint\\s*\\(/);
+  assert.doesNotMatch(chart, /updateLatencyPoint\\s*\\(/);
+  assert.match(chart, /export function addChartPoint\\(/);
+  assert.match(main, /from '\\.\\/dashboard-chart\\.js'/);
 });
 
 test('quick upload honors the selected 1 MiB data budget', async () => {
