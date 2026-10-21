@@ -226,9 +226,15 @@ async function main() {
     console.log('Browser smoke passed: Quick profile, mocked speed test, true download progress, Stop.');
   } finally {
     cdp?.close();
-    chromeProcess?.kill('SIGTERM');
+    if (chromeProcess && chromeProcess.exitCode === null) {
+      const exited = new Promise(resolve => chromeProcess.once('exit', resolve));
+      chromeProcess.kill('SIGTERM');
+      await Promise.race([exited, sleep(3000)]);
+      if (chromeProcess.exitCode === null) chromeProcess.kill('SIGKILL');
+    }
     await new Promise(resolve => server.close(resolve));
-    fs.rmSync(profile, { recursive: true, force: true });
+    // Chrome can briefly hold profile files after DevTools has closed.
+    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 12, retryDelay: 200 });
   }
 }
 
