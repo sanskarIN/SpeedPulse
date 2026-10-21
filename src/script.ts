@@ -6,6 +6,7 @@ declare const html2canvas: any;
 
 import { formatSpeed, playSound, calculateGrade, fireConfetti } from './utils.js';
 import { initChart, updateChartTheme, addChartPoint, clearChart } from './dashboard-chart.js';
+import { calculateReadiness, READINESS_ORDER } from './readiness.js';
 import { runPingTest, runDownloadTest, runUploadTest, abortTest, explainTestError } from './speedtest.js';
 import { getTestProfile, loadTestProfile, saveTestProfile, effectiveTestBudget } from './test-profiles.js';
 import type { ServerBudgetLimits } from './test-profiles.js';
@@ -187,17 +188,18 @@ async function startTest() {
         document.getElementById('overall-grade').textContent = gradeObj.grade;
         document.getElementById('grade-desc').textContent = gradeObj.text;
 
-        // Update readiness indicators
-        const inds = document.querySelectorAll('.status-indicator');
-        inds[0].className = 'status-indicator ' + (finalDown > 25 ? 'status-pass' : 'status-fail'); // 4k
-        inds[1].className = 'status-indicator ' + ((finalDown > 10 && finalUp != null && finalUp > 3 && ping < 100) ? 'status-pass' : 'status-fail'); // Video
-        inds[2].className = 'status-indicator ' + ((finalDown > 25 && ping < 50 && jitter < 10) ? 'status-pass' : 'status-fail'); // Gaming
-        inds[3].className = 'status-indicator ' + (finalUp != null && finalUp > 20 ? 'status-pass' : 'status-fail'); // Upload
-
-        if (uploadError) {
-          if (inds[1]) inds[1].className = 'status-indicator';
-          if (inds[3]) inds[3].className = 'status-indicator';
-        }
+        // Heuristic status: do not classify unavailable measurements as failures.
+        const indicators = document.querySelectorAll('.status-indicator');
+        const readiness = calculateReadiness({ download: finalDown, upload: finalUp, ping, jitter });
+        READINESS_ORDER.forEach((key, index) => {
+            const indicator = indicators[index];
+            if (!indicator) return;
+            const status = readiness[key];
+            indicator.className = 'status-indicator' +
+                (status === 'unknown' ? '' : ' status-' + status);
+            indicator.setAttribute('aria-label', status === 'unknown'
+                ? 'Not enough measured data' : (status === 'pass' ? 'Likely suitable' : 'May be unsuitable'));
+        });
         saveResult(finalResult);
         renderHistory();
 
