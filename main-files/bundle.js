@@ -192,8 +192,11 @@
               backgroundColor: "rgba(139, 92, 246, 0.1)",
               borderWidth: 2,
               tension: 0.4,
-              fill: true,
-              pointRadius: 0
+              fill: false,
+              // Fetch supplies one upload sample only after server ACK.
+              // Draw its real point rather than fabricating a line.
+              pointRadius: 4,
+              pointHoverRadius: 6
             }
           ]
         },
