@@ -68,3 +68,24 @@ test('public frontend exposes the data budget selector', () => {
   assert.match(bundle, /profile\.downloadBytes/);
   assert.match(bundle, /profile\.uploadBytes/);
 });
+
+test('ASP.NET host limits cap a thorough test without changing the chosen profile', () => {
+  const profiles = loadModule({});
+  const thorough = profiles.getTestProfile('thorough');
+  const budget = profiles.effectiveTestBudget(thorough, {
+    maxDownloadBytes: 10 * 1024 * 1024, maxUploadBytes: 2 * 1024 * 1024
+  });
+  assert.equal(budget.downloadBytes, 10 * 1024 * 1024);
+  assert.equal(budget.uploadBytes, 2 * 1024 * 1024);
+  assert.equal(thorough.downloadBytes, 50 * 1024 * 1024);
+});
+
+test('host budget calculation ignores corrupt values and stays safe', () => {
+  const profiles = loadModule({});
+  const quick = profiles.getTestProfile('quick');
+  const budget = profiles.effectiveTestBudget(quick, {
+    maxDownloadBytes: -12, maxUploadBytes: Infinity
+  });
+  assert.equal(budget.downloadBytes, quick.downloadBytes);
+  assert.equal(budget.uploadBytes, quick.uploadBytes);
+});
