@@ -140,3 +140,110 @@ test('invalid transfer budgets never initiate a request', async () => {
     global.fetch = previousFetch;
   }
 });
+
+test('a stalled latency probe times out and is counted as failed HTTP sampling', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  let calls = 0;
+  global.fetch = async () => {
+    calls++;
+    if (calls === 1) return new Promise(() => {}); // ignores AbortSignal
+    return { ok: true, status: 200 };
+  };
+  try {
+    const result = await engine.runPingTest('local', () => {}, 10);
+    assert.equal(calls, 10);
+    assert.equal(result.packetLoss, 10);
+    assert.ok(Number.isFinite(result.ping));
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('a stalled download stream cannot hang a speed test indefinitely', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    body: { getReader: () => ({
+      read: () => new Promise(() => {}), // deliberately non-cooperative reader
+      cancel: async () => {},
+    }) },
+  });
+  try {
+    await assert.rejects(engine.runDownloadTest('local', () => {}, 1024, 20),
+      error => error.name === 'MeasurementTimeoutError' && error.stage === 'download');
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('a stalled upload times out even if fetch ignores the abort signal', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  global.fetch = () => new Promise(() => {});
+  try {
+    await assert.rejects(engine.runUploadTest('local', () => {}, 1024, 20),
+      error => error.name === 'MeasurementTimeoutError' && error.stage === 'upload');
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('Stop cancels a non-cooperative upload without waiting for its timeout', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  global.fetch = () => new Promise(() => {});
+  try {
+    const result = engine.runUploadTest('local', () => {}, 1024, 30_000);
+    engine.abortTest();
+    await assert.rejects(result, { name: 'AbortError' });
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('optional chart callback failure does not invalidate a completed download', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  global.fetch = async () => {
+    const bytes = new Uint8Array(512);
+    let step = 0;
+    return { ok: true, body: { getReader: () => ({
+      read: async () => step++ === 0
+        ? { done: false, value: bytes }
+        : { done: true }
+    }) } };
+  };
+  try {
+    const measured = await engine.runDownloadTest('local', () => {
+      throw new Error('Chart widget was removed');
+    }, 512);
+    assert.ok(Number.isFinite(measured) && measured > 0);
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('inline errors explain timeout, rate limiting and oversize requests', async () => {
+  const engine = await enginePromise;
+  assert.match(engine.explainTestError(new engine.MeasurementTimeoutError('upload', 20),
+    'upload', 'local'), /upload timed out/i);
+  assert.match(engine.explainTestError(new Error('Upload failed: HTTP 429'),
+    'upload', 'cloudflare'), /rate-limiting/i);
+  assert.match(engine.explainTestError(new Error('Upload failed: HTTP 413'),
+    'upload', 'local'), /server limit/i);
+});
+
+test('timeouts reject invalid configuration before any transfer starts', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  global.fetch = () => { throw new Error('Network should never be called'); };
+  try {
+    await assert.rejects(engine.runPingTest('local', () => {}, 0), RangeError);
+    await assert.rejects(engine.runDownloadTest('local', () => {}, 1024, 200_000), RangeError);
+    await assert.rejects(engine.runUploadTest('local', () => {}, 1024, 0), RangeError);
+  } finally {
+    global.fetch = original;
+  }
+});
