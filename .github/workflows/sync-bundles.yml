@@ -48,4 +48,12 @@ jobs:
           git config user.email 'sanskarin@outlook.in'
           git -c user.name='Sanskar' -c user.email='sanskarin@outlook.in' \
             commit -m "build(typescript): sync browser bundles with typed sources"
+          # A docs or test commit can land while the build is in progress.
+          # Rebase only if the TypeScript inputs have not changed upstream.
+          git fetch origin main
+          if ! git diff --quiet HEAD origin/main -- src/ package.json; then
+            echo "New TypeScript inputs landed; their own workflow run will rebuild assets."
+            exit 0
+          fi
+          git pull --rebase origin main
           git push origin HEAD:main
