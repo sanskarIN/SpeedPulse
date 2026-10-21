@@ -104,13 +104,13 @@ test('shipped test flow presents upload failure inline without blocking alert', 
   assert.match(source, /sw\.js\?v=7\.0/);
 });
 
-test('chart adapter is a standalone TypeScript module with no fabricated latency data', () => {
+test('chart adapter is separate from the dashboard without fabricated latency data', () => {
   const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'script.ts'), 'utf8');
   const chart = fs.readFileSync(path.join(__dirname, '..', 'src', 'dashboard-chart.ts'), 'utf8');
-  assert.doesNotMatch(main, /updateLatencyPoint\\s*\\(/);
-  assert.doesNotMatch(chart, /updateLatencyPoint\\s*\\(/);
-  assert.match(chart, /export function addChartPoint\\(/);
-  assert.match(main, /from '\\.\\/dashboard-chart\\.js'/);
+  assert.ok(!main.includes('updateLatencyPoint('));
+  assert.ok(!chart.includes('updateLatencyPoint('));
+  assert.ok(chart.includes('export function addChartPoint('));
+  assert.ok(main.includes("from './dashboard-chart.js'"));
 });
 
 test('quick upload honors the selected 1 MiB data budget', async () => {
