@@ -64,6 +64,31 @@ from breaking the dashboard. CSV export includes profile and completion status,
 quotes values correctly, and escapes formula-like text so spreadsheet software
 does not interpret an ISP name as a formula.
 
+## Reliable and cancellable network measurements
+
+- Every HTTP latency probe has an **8-second deadline**. Failed/expired
+  HTTP probes are counted in the application-layer failure ratio and **must not
+  be described as raw IP packet loss**.
+- Download and upload stages each have a **90-second deadline**. A timeout
+  cancels its underlying browser request and rejects the measurement promptly,
+  including if an adapter fails to respond to an abort.
+- The Stop button cancels the active network operation. An explicitly stopped
+  test is not confused with a server timeout or a successful result.
+- A completed download is only valid if its received body contains exactly
+  the requested bytes. Truncated, empty and excessive responses do not produce
+  fabricated speed estimates.
+- Download progress is based on **received bytes**, with an accessible
+  progress indicator; upload uses a completion-only indicator because Fetch
+  does not expose trustworthy upload progress.
+- Chart/UI callback errors no longer invalidate a successful network
+  measurement. Server failures and HTTP 429/413 statuses produce specific
+  inline explanations without browser alert dialogs.
+
+Error handling is tested with non-cooperative fetch mocks, stalled response
+bodies, truncated downloads, explicit cancellation and invalid timeout values.
+These browser-level measurements remain estimates affected by latency, device
+overhead, and the selected test server.
+
 ## Tests and generated code
 
 ```bash
