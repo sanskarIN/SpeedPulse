@@ -54,7 +54,7 @@ jobs:
           node --check main-files/bundle.js
           node --check main-files/bundle-dev.js
           node --check main-files/sw.js
-          node --test
+          npm test
           node --check scripts/prepare-pages.cjs
       - name: Stage site assets and normalize links
         run: node scripts/prepare-pages.cjs
