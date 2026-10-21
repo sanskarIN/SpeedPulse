@@ -253,8 +253,11 @@ async function startTest() {
         ensureActive();
           setGaugePhase('Download Test');
         let currentDown = 0;
-        const finalDown = await runDownloadTest(server, mbps => {
+        const finalDown = await runDownloadTest(server, (mbps, completedFraction) => {
             currentDown = mbps;
+            if (typeof completedFraction === 'number') {
+                progDown.style.width = (Math.min(1, Math.max(0, completedFraction)) * 100).toFixed(1) + '%';
+            }
             updateGauge(mbps);
             valDown.textContent = formatSpeed(mbps, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
             addChartPoint(mbps, true);
