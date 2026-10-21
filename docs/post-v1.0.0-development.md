@@ -100,6 +100,14 @@ The main dashboard now imports two extracted, independently testable modules:
   distinguishes passing, failing and **unknown** states. A missing upload or
   other incomplete reading cannot become a false failure.
 
+Real-world Quick-mode browser QA also found that the progress indicator needed
+a **visible numerical percentage**, rather than relying solely on the visual
+progress bar and its ARIA value. The dashboard now shows the received-byte
+percentage, and browser CI verifies it reads **100%** on a successful test.
+The upload chart displays the single observed completion value as a marker;
+it does not draw a fictitious live upload curve (Fetch upload progress is not
+available).
+
 Both modules are part of `npm run typecheck:engine`; the remaining legacy
 dashboard code is progressively being migrated into independently typechecked
 modules. Do not assume all of `src/script.ts` is strict-typed yet.
