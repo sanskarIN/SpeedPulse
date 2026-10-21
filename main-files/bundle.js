@@ -148,223 +148,291 @@
   });
 
   // src/speedtest.ts
-  function abortTest() {
-    if (controller) {
-      controller.abort();
-      controller = null;
+  function resolveServer(server) {
+    return server === "local" && isFileProtocol ? "cloudflare" : server;
+  }
+  function assertBytes(bytes, max) {
+    if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > max) {
+      throw new RangeError(`Test payload must be between 1 and ${max} bytes`);
     }
   }
-  async function runPingTest(server = 'cloudflare', onProgress) {
-    if (server === "local" && isFileProtocol) server = "cloudflare";
-    controller = new AbortController();
+  function abortTest() {
+    controller?.abort();
+    controller = null;
+  }
+  async function runPingTest(selectedServer = "cloudflare", onProgress = () => {
+  }) {
+    const server = resolveServer(selectedServer);
+    const signal = (controller = new AbortController()).signal;
     const target = ENDPOINTS[server].down;
     const iterations = 10;
-    const pings = [];
+    const readings = [];
     let failed = 0;
     for (let i = 0; i < iterations; i++) {
-      if (controller.signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
+      if (signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
       const start = performance.now();
       try {
         const response = await fetch(`${target}?bytes=0&cb=${Date.now()}_${i}`, {
           method: "GET",
-          signal: controller.signal,
+          signal,
           cache: "no-store"
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status} during latency probe`);
-        const duration = performance.now() - start;
-        pings.push(duration);
-        onProgress(duration);
-      } catch (e) {
-        if (e.name === "AbortError") throw e;
+        if (!response.ok) throw new Error(`Latency probe returned HTTP ${response.status}`);
+        const elapsed = performance.now() - start;
+        readings.push(elapsed);
+        onProgress(elapsed);
+      } catch (error) {
+        if (signal.aborted || error instanceof Error && error.name === "AbortError") throw error;
         failed++;
       }
     }
-    if (pings.length === 0) throw new Error("Ping test failed completely");
-    const avgPing = pings.reduce((a, b) => a + b, 0) / pings.length;
-    let jitterSum = 0;
-    for (let i = 1; i < pings.length; i++) {
-      jitterSum += Math.abs(pings[i] - pings[i - 1]);
+    if (!readings.length) throw new Error("All latency probes failed");
+    const ping = readings.reduce((a, b) => a + b, 0) / readings.length;
+    let sum = 0;
+    for (let i = 1; i < readings.length; i++) {
+      sum += Math.abs(readings[i] - readings[i - 1]);
     }
-    const jitter = pings.length > 1 ? jitterSum / (pings.length - 1) : 0;
-    const packetLoss = failed / iterations * 100;
-    return { ping: avgPing, jitter, packetLoss };
+    return {
+      ping,
+      jitter: readings.length > 1 ? sum / (readings.length - 1) : 0,
+      packetLoss: failed / iterations * 100
+    };
   }
-  async function runDownloadTest(server = 'cloudflare', onProgress, bytes = 25 * 1024 * 1024) {
-    if (server === "local" && isFileProtocol) server = "cloudflare";
-    controller = new AbortController();
+  async function runDownloadTest(selectedServer = "cloudflare", onProgress = () => {
+  }, bytes = 25 * 1024 * 1024) {
+    assertBytes(bytes, MAX_DOWNLOAD_BYTES);
+    const server = resolveServer(selectedServer);
+    const signal = (controller = new AbortController()).signal;
     const target = ENDPOINTS[server].down;
-    if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > 64 * 1024 * 1024) {
-      throw new RangeError('Invalid download payload size');
-    }
-    const bytesToDownload = bytes;
-    const url = `${target}?bytes=${bytesToDownload}&cb=${Date.now()}`;
-    const startTime = performance.now();
-    let loadedBytes = 0;
-    try {
-      const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
-      if (!response.ok) throw new Error("Network response was not ok");
-      if (!response.body) throw new Error('Streaming download unavailable');
-    const reader = response.body.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        loadedBytes += value.length;
-        const now = performance.now();
-        const durationSec = (now - startTime) / 1e3;
-        if (durationSec > 0.1) {
-          const mbps = loadedBytes * 8 / 1e6 / durationSec;
-          onProgress(mbps);
-        }
-      }
-    } catch (e) {
-      throw e;
-    }
-    const totalDurationSec = (performance.now() - startTime) / 1e3;
-    return totalDurationSec > 0 ? loadedBytes * 8 / 1e6 / totalDurationSec : 0;
-  }
-  async function runUploadTest(server = 'cloudflare', onProgress, bytes = 5 * 1024 * 1024) {
-    if (server === "local" && isFileProtocol) server = "cloudflare";
-    controller = new AbortController();
-    const target = ENDPOINTS[server].up;
-    // Fetch does not expose upload byte progress; do not fabricate live measurements.
-    if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > 8 * 1024 * 1024) {
-      throw new RangeError('Invalid upload payload size');
-    }
-    const payloadSize = bytes;
-    const buffer = new Uint8Array(payloadSize);
-    for (let i = 0; i < payloadSize; i++) buffer[i] = Math.random() * 255;
     const start = performance.now();
-    // Cloudflare's upload API expects a bytes parameter; the local server ignores it.
-    const uploadUrl = server === 'cloudflare' ? target + '?bytes=' + payloadSize : target;
+    let received = 0;
+    const response = await fetch(`${target}?bytes=${bytes}&cb=${Date.now()}`, {
+      signal,
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error(`Download returned HTTP ${response.status}`);
+    if (!response.body) throw new Error("Streaming download is unavailable in this browser");
+    const reader = response.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      const elapsed = (performance.now() - start) / 1e3;
+      if (elapsed > 0.1) onProgress(received * 8 / 1e6 / elapsed);
+    }
+    if (signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
+    if (!received) throw new Error("Download returned no bytes");
+    const seconds = (performance.now() - start) / 1e3;
+    const measured = seconds > 0 ? received * 8 / 1e6 / seconds : 0;
+    onProgress(measured);
+    return measured;
+  }
+  async function runUploadTest(selectedServer = "cloudflare", onProgress = () => {
+  }, bytes = 5 * 1024 * 1024) {
+    assertBytes(bytes, MAX_UPLOAD_BYTES);
+    const server = resolveServer(selectedServer);
+    const signal = (controller = new AbortController()).signal;
+    const target = ENDPOINTS[server].up;
+    const buffer = new Uint8Array(bytes);
+    for (let i = 0; i < buffer.length; i++) buffer[i] = Math.random() * 256;
+    const body = new Blob([buffer], { type: "text/plain" });
+    const uploadUrl = server === "cloudflare" ? `${target}?bytes=${bytes}` : target;
+    const start = performance.now();
     const response = await fetch(uploadUrl, {
       method: "POST",
-      body: new Blob([buffer], { type: "text/plain" }),
+      body,
       mode: "cors",
-      signal: controller.signal
+      signal
     });
     if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
-    const durationSec = (performance.now() - start) / 1e3;
-    const measuredMbps = durationSec > 0 ? payloadSize * 8 / 1e6 / durationSec : 0;
-    onProgress(measuredMbps);
-    return measuredMbps;
+    if (signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
+    const seconds = (performance.now() - start) / 1e3;
+    const measured = seconds > 0 ? bytes * 8 / 1e6 / seconds : 0;
+    onProgress(measured);
+    return measured;
   }
-  var ENDPOINTS, isFileProtocol, controller;
+  var MAX_DOWNLOAD_BYTES, MAX_UPLOAD_BYTES, ENDPOINTS, controller, isFileProtocol;
   var init_speedtest = __esm({
     "src/speedtest.ts"() {
+      MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
+      MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
       ENDPOINTS = {
-        local: {
-          down: "/api/down",
-          up: "/api/up"
-        },
+        local: { down: "/api/down", up: "/api/up" },
         cloudflare: {
           down: "https://speed.cloudflare.com/__down",
           up: "https://speed.cloudflare.com/__up"
         }
       };
-      isFileProtocol = typeof window !== "undefined" && window.location.protocol === "file:";
       controller = null;
+      isFileProtocol = typeof window !== "undefined" && window.location.protocol === "file:";
+    }
+  });
+
+  // src/test-profiles.ts
+  function getTestProfile(input) {
+    if (typeof input === "string" && Object.prototype.hasOwnProperty.call(TEST_PROFILES, input)) {
+      return TEST_PROFILES[input];
+    }
+    return TEST_PROFILES[DEFAULT_TEST_PROFILE];
+  }
+  function loadTestProfile() {
+    try {
+      return getTestProfile(localStorage.getItem(STORAGE_KEY));
+    } catch {
+      return TEST_PROFILES[DEFAULT_TEST_PROFILE];
+    }
+  }
+  function saveTestProfile(input) {
+    const profile = getTestProfile(input);
+    try {
+      localStorage.setItem(STORAGE_KEY, profile.id);
+    } catch {
+    }
+    return profile;
+  }
+  function effectiveTestBudget(profile, limits) {
+    if (!limits) return { downloadBytes: profile.downloadBytes, uploadBytes: profile.uploadBytes };
+    const safeDownloadLimit = Number.isSafeInteger(limits.maxDownloadBytes) && limits.maxDownloadBytes >= 1 ? limits.maxDownloadBytes : profile.downloadBytes;
+    const safeUploadLimit = Number.isSafeInteger(limits.maxUploadBytes) && limits.maxUploadBytes >= 1 ? limits.maxUploadBytes : profile.uploadBytes;
+    return {
+      downloadBytes: Math.min(profile.downloadBytes, safeDownloadLimit),
+      uploadBytes: Math.min(profile.uploadBytes, safeUploadLimit)
+    };
+  }
+  var TEST_PROFILES, DEFAULT_TEST_PROFILE, STORAGE_KEY;
+  var init_test_profiles = __esm({
+    "src/test-profiles.ts"() {
+      TEST_PROFILES = Object.freeze({
+        quick: Object.freeze({
+          id: "quick",
+          label: "Quick \u2022 5 MiB down + 1 MiB up",
+          downloadBytes: 5 * 1024 * 1024,
+          uploadBytes: 1 * 1024 * 1024
+        }),
+        standard: Object.freeze({
+          id: "standard",
+          label: "Standard \u2022 25 MiB down + 5 MiB up",
+          downloadBytes: 25 * 1024 * 1024,
+          uploadBytes: 5 * 1024 * 1024
+        }),
+        thorough: Object.freeze({
+          id: "thorough",
+          label: "Thorough \u2022 50 MiB down + 8 MiB up",
+          downloadBytes: 50 * 1024 * 1024,
+          uploadBytes: 8 * 1024 * 1024
+        })
+      });
+      DEFAULT_TEST_PROFILE = "standard";
+      STORAGE_KEY = "speedpulse_test_profile";
     }
   });
 
   // src/history.ts
+  function cleanNumber(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : void 0;
+  }
+  function cleanEntry(input) {
+    if (!input || typeof input !== "object") return null;
+    const item = input;
+    if (typeof item.id !== "string" || item.id.length > 100 || typeof item.date !== "string" || !Number.isFinite(Date.parse(item.date))) {
+      return null;
+    }
+    return {
+      id: item.id,
+      date: item.date,
+      isp: typeof item.isp === "string" ? item.isp.slice(0, 200) : "Unknown",
+      profile: ["quick", "standard", "thorough"].includes(String(item.profile)) ? String(item.profile) : void 0,
+      download: cleanNumber(item.download),
+      upload: cleanNumber(item.upload),
+      ping: cleanNumber(item.ping),
+      jitter: cleanNumber(item.jitter),
+      packetLoss: cleanNumber(item.packetLoss)
+    };
+  }
   function getHistory() {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
-    } catch (e) {
-      console.error("Failed to load history", e);
+      const raw = localStorage.getItem(STORAGE_KEY2);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.slice(0, MAX_ENTRIES).map(cleanEntry).filter((item) => item !== null) : [];
+    } catch {
       return [];
     }
   }
   function saveResult(result) {
-    const history = getHistory();
-    const entry = {
-      id: Date.now().toString(),
-      date: (/* @__PURE__ */ new Date()).toISOString(),
-      ...result
-    };
-    history.unshift(entry);
-    if (history.length > 50) history.length = 50;
+    const now = /* @__PURE__ */ new Date();
+    const candidate = cleanEntry({
+      ...result,
+      id: String(now.getTime()) + "-" + Math.random().toString(36).slice(2, 8),
+      date: now.toISOString()
+    });
+    if (!candidate) return getHistory();
+    const history = [candidate, ...getHistory()].slice(0, MAX_ENTRIES);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-    } catch (e) {
-      console.error("Failed to save history", e);
+      localStorage.setItem(STORAGE_KEY2, JSON.stringify(history));
+    } catch {
     }
     return history;
   }
   function clearHistory() {
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+      localStorage.removeItem(STORAGE_KEY2);
+    } catch {
+    }
     return [];
+  }
+  function csvCell(value) {
+    const raw = value == null ? "" : String(value);
+    const safe = /^[=+@\-\t\r]/.test(raw) ? "'" + raw : raw;
+    return '"' + safe.replace(/"/g, '""') + '"';
   }
   function exportToCSV() {
     const history = getHistory();
-    if (history.length === 0) return;
-    const headers = ["Date", "Download (Mbps)", "Upload (Mbps)", "Ping (ms)", "Jitter (ms)", "ISP"];
+    if (!history.length) return;
+    const header = [
+      "Date",
+      "Download (Mbps)",
+      "Upload (Mbps)",
+      "Ping (ms)",
+      "Jitter (ms)",
+      "ISP",
+      "Profile",
+      "Status"
+    ];
     const rows = history.map((item) => [
-      new Date(item.date).toLocaleString(),
-      Number.isFinite(item.download) ? item.download.toFixed(2) : '--',
-      Number.isFinite(item.upload) ? item.upload.toFixed(2) : '--',
-      Number.isFinite(item.ping) ? Math.round(item.ping) : '',
-      Number.isFinite(item.jitter) ? Math.round(item.jitter) : '',
-      `"${item.isp || "Unknown"}"`
-      // wrap in quotes to handle commas
+      item.date,
+      item.download?.toFixed(2) ?? "",
+      item.upload?.toFixed(2) ?? "",
+      item.ping?.toFixed(0) ?? "",
+      item.jitter?.toFixed(0) ?? "",
+      item.isp ?? "Unknown",
+      item.profile ?? "legacy",
+      item.upload == null ? "Partial" : "Complete"
     ]);
-    const csvContent = [
-      headers.join(","),
-      ...rows.map((r) => r.join(","))
-    ].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
+    const csvContent = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csvContent], { type: "text/csv;charset=utf-8;" }));
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `speedpulse_history_${Date.now()}.csv`);
+    link.download = `speedpulse_history_${Date.now()}.csv`;
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
   }
-  var STORAGE_KEY;
+  var STORAGE_KEY2, MAX_ENTRIES;
   var init_history = __esm({
     "src/history.ts"() {
-      STORAGE_KEY = "speedpulse_history";
+      STORAGE_KEY2 = "speedpulse_history";
+      MAX_ENTRIES = 50;
     }
   });
-
-  // src/test-profiles.ts — built-in data budgets (no backend dependency).
-  var TEST_PROFILES = Object.freeze({
-    quick: Object.freeze({ id: 'quick', downloadBytes: 5 * 1024 * 1024, uploadBytes: 1 * 1024 * 1024 }),
-    standard: Object.freeze({ id: 'standard', downloadBytes: 25 * 1024 * 1024, uploadBytes: 5 * 1024 * 1024 }),
-    thorough: Object.freeze({ id: 'thorough', downloadBytes: 50 * 1024 * 1024, uploadBytes: 8 * 1024 * 1024 })
-  });
-  function getTestProfile(input) {
-    return typeof input === 'string' && Object.prototype.hasOwnProperty.call(TEST_PROFILES, input)
-      ? TEST_PROFILES[input] : TEST_PROFILES.standard;
-  }
-  function effectiveTestBudget(profile, limits) {
-    if (!limits) return { downloadBytes: profile.downloadBytes, uploadBytes: profile.uploadBytes };
-    const maxDownload = Number.isSafeInteger(limits.maxDownloadBytes) && limits.maxDownloadBytes >= 1
-      ? limits.maxDownloadBytes : profile.downloadBytes;
-    const maxUpload = Number.isSafeInteger(limits.maxUploadBytes) && limits.maxUploadBytes >= 1
-      ? limits.maxUploadBytes : profile.uploadBytes;
-    return {
-      downloadBytes: Math.min(profile.downloadBytes, maxDownload),
-      uploadBytes: Math.min(profile.uploadBytes, maxUpload)
-    };
-  }
-  function loadTestProfile() {
-    try { return getTestProfile(localStorage.getItem('speedpulse_test_profile')); }
-    catch { return TEST_PROFILES.standard; }
-  }
-  function saveTestProfile(input) {
-    const profile = getTestProfile(input);
-    try { localStorage.setItem('speedpulse_test_profile', profile.id); } catch {}
-    return profile;
-  }
 
   // src/script.ts
   var require_script = __commonJS({
     "src/script.ts"() {
       init_utils();
       init_speedtest();
+      init_test_profiles();
       init_history();
       var startBtn = document.getElementById("start-btn");
       var stopBtn = document.getElementById("stop-btn");
@@ -470,8 +538,7 @@
         }
       }
       function addChartPoint(val, isDown) {
-    // Chart actual download/upload samples only. Do not invent latency readings.
-    if (!speedChart) return;
+        if (!speedChart) return;
         const now = (/* @__PURE__ */ new Date()).toLocaleTimeString();
         chartLabels.push(now);
         if (isDown) {
@@ -512,12 +579,12 @@
       async function startTest() {
         if (isTesting) return;
         isTesting = true;
-          const runId = ++testGeneration;
-          const ensureActive = () => {
-            if (!isTesting || runId !== testGeneration) {
-              throw new DOMException("Speed test cancelled", "AbortError");
-            }
-          };
+        const runId = ++testGeneration;
+        const ensureActive = () => {
+          if (!isTesting || runId !== testGeneration) {
+            throw new DOMException("Speed test cancelled", "AbortError");
+          }
+        };
         startBtn.classList.add("hidden");
         stopBtn.classList.remove("hidden");
         shareBtn.classList.add("hidden");
@@ -532,10 +599,15 @@
         document.getElementById("overall-grade").textContent = "-";
         document.getElementById("grade-desc").textContent = "Testing in progress...";
         document.querySelectorAll(".status-indicator").forEach((el) => el.className = "status-indicator");
-        try { playSound('start'); } catch (error) { console.warn('Audio notification skipped:', error); }
+        try {
+          playSound("start");
+        } catch (error) {
+          console.warn("Audio notification skipped:", error);
+        }
         const server = document.getElementById("server-select").value;
-        const profile = getTestProfile(document.getElementById('test-profile-select').value);
-        const budget = effectiveTestBudget(profile, server === 'local' ? window.speedpulseServerLimits : null);
+        const profile = getTestProfile(document.getElementById("test-profile-select").value);
+        const serverLimits = server === "local" ? window.speedpulseServerLimits : null;
+        const budget = effectiveTestBudget(profile, serverLimits);
         const finalResult = { isp: document.getElementById("info-isp").textContent, profile: profile.id };
         try {
           setGaugePhase("Finding Optimal Server...");
@@ -572,32 +644,30 @@
           setGaugePhase("Upload Test");
           let currentUp = 0;
           let finalUp = null;
-          let uploadError = '';
+          let uploadError = "";
           try {
             finalUp = await runUploadTest(server, (mbps) => {
-            currentUp = mbps;
-            updateGauge(mbps);
-            valUp.textContent = formatSpeed(mbps, document.getElementById("unit-select").value);
-            addChartPoint(mbps, false);
-          }, budget.uploadBytes);
-            valUp.textContent = formatSpeed(finalUp, document.getElementById('unit-select').value);
-            progUp.style.width = '100%';
+              currentUp = mbps;
+              updateGauge(mbps);
+              valUp.textContent = formatSpeed(mbps, document.getElementById("unit-select").value);
+              addChartPoint(mbps, false);
+            }, budget.uploadBytes);
+            valUp.textContent = formatSpeed(finalUp, document.getElementById("unit-select").value);
+            progUp.style.width = "100%";
             finalResult.upload = finalUp;
           } catch (error) {
-            if (error && error.name === 'AbortError') throw error;
-            uploadError = server === 'cloudflare'
-              ? 'Cloudflare upload request was unavailable (network, CORS, or HTTP failure).'
-              : 'The local ASP.NET upload endpoint did not respond successfully.';
-            console.warn('[SpeedPulse] Upload measurement unavailable:', error);
-            valUp.textContent = '--';
-            progUp.style.width = '0%';
+            if (error && error.name === "AbortError") throw error;
+            uploadError = server === "cloudflare" ? "Cloudflare upload request was unavailable (network, CORS, or HTTP failure)." : "The local ASP.NET upload endpoint did not respond successfully.";
+            console.warn("[SpeedPulse] Upload measurement unavailable:", error);
+            valUp.textContent = "--";
+            progUp.style.width = "0%";
           }
           ensureActive();
           setGaugePhase("Finished");
           updateGauge(finalDown);
           const gradeObj = uploadError ? {
-            grade: '-',
-            text: 'Partial result: download and ping measured; upload unavailable. ' + uploadError
+            grade: "-",
+            text: "Partial result: download and ping measured; upload unavailable. " + uploadError
           } : calculateGrade(finalDown, finalUp, ping);
           document.getElementById("overall-grade").textContent = gradeObj.grade;
           document.getElementById("grade-desc").textContent = gradeObj.text;
@@ -607,29 +677,39 @@
           inds[2].className = "status-indicator " + (finalDown > 25 && ping < 50 && jitter < 10 ? "status-pass" : "status-fail");
           inds[3].className = "status-indicator " + (finalUp != null && finalUp > 20 ? "status-pass" : "status-fail");
           if (uploadError) {
-            if (inds[1]) inds[1].className = 'status-indicator';
-            if (inds[3]) inds[3].className = 'status-indicator';
+            if (inds[1]) inds[1].className = "status-indicator";
+            if (inds[3]) inds[3].className = "status-indicator";
           }
           saveResult(finalResult);
           renderHistory();
-          try { playSound('finish'); } catch (error) { console.warn('Audio notification skipped:', error); }
+          try {
+            playSound("finish");
+          } catch (error) {
+            console.warn("Audio notification skipped:", error);
+          }
           const history = getHistory();
           if (history.length > 1) {
             const previousBest = Math.max(...history.slice(1).map((h) => h.download || 0));
             if (finalDown > previousBest) {
-              try { fireConfetti(); } catch (error) { console.warn('Celebration animation skipped:', error); }
+              try {
+                fireConfetti();
+              } catch (error) {
+                console.warn("Celebration animation skipped:", error);
+              }
             }
           } else if (finalDown > 100) {
-            try { fireConfetti(); } catch (error) { console.warn('Celebration animation skipped:', error); }
+            try {
+              fireConfetti();
+            } catch (error) {
+              console.warn("Celebration animation skipped:", error);
+            }
           }
         } catch (e) {
           if (runId !== testGeneration) return;
           if (e.name !== "AbortError") {
             console.error(e);
             setGaugePhase("Error");
-            document.getElementById('grade-desc').textContent =
-            'Could not complete the test: ' + (e instanceof Error ? e.message : 'network request failed') +
-            '. Try again or change servers.';
+            document.getElementById("grade-desc").textContent = "Could not complete the test: " + (e instanceof Error ? e.message : "network request failed") + ". Try again or change servers.";
           } else {
             setGaugePhase("Aborted");
           }
@@ -709,11 +789,11 @@
           const tdDate = document.createElement("td");
           tdDate.textContent = new Date(item.date).toLocaleDateString() + " " + new Date(item.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           const tdDown = document.createElement("td");
-          tdDown.innerHTML = `<strong class="highlight-down">${Number.isFinite(item.download) ? item.download.toFixed(2) : '--'}</strong>`;
+          tdDown.innerHTML = `<strong class="highlight-down">${Number.isFinite(item.download) ? item.download.toFixed(2) : "--"}</strong>`;
           const tdUp = document.createElement("td");
-          tdUp.innerHTML = `<strong class="highlight-up">${Number.isFinite(item.upload) ? item.upload.toFixed(2) : '--'}</strong>`;
+          tdUp.innerHTML = `<strong class="highlight-up">${Number.isFinite(item.upload) ? item.upload.toFixed(2) : "--"}</strong>`;
           const tdPing = document.createElement("td");
-          tdPing.textContent = Number.isFinite(item.ping) ? Math.round(item.ping) + ' ms' : '--';
+          tdPing.textContent = Number.isFinite(item.ping) ? Math.round(item.ping) + " ms" : "--";
           const tdISP = document.createElement("td");
           tdISP.textContent = item.isp || "Unknown";
           tr.append(tdCheck, tdDate, tdDown, tdUp, tdPing, tdISP);
@@ -920,23 +1000,22 @@
           if (history.length > 0) {
             const last = history[0];
             valDown.textContent = formatSpeed(last.download, document.getElementById("unit-select").value);
-            valUp.textContent = Number.isFinite(last.upload) ? formatSpeed(last.upload, document.getElementById("unit-select").value) : '--';
+            valUp.textContent = Number.isFinite(last.upload) ? formatSpeed(last.upload, document.getElementById("unit-select").value) : "--";
             updateGauge(last.download);
           }
         }
         document.querySelectorAll(".unit-label").forEach((el) => el.textContent = document.getElementById("unit-select").value);
       });
-      const profileSelect = document.getElementById('test-profile-select');
-      const budgetNote = document.getElementById('profile-budget-note');
+      var profileSelect = document.getElementById("test-profile-select");
+      var budgetNote = document.getElementById("profile-budget-note");
       function showProfileBudget() {
-        const profile = getTestProfile(profileSelect.value);
-        const totalMiB = (profile.downloadBytes + profile.uploadBytes) / (1024 * 1024);
-        if (budgetNote) budgetNote.textContent =
-          profile.id + ': about ' + totalMiB + ' MiB payload per test (plus network overhead).';
+        const chosen = getTestProfile(profileSelect.value);
+        const totalMiB = (chosen.downloadBytes + chosen.uploadBytes) / (1024 * 1024);
+        if (budgetNote) budgetNote.textContent = chosen.id + ": about " + totalMiB + " MiB payload per test (plus network overhead).";
       }
       profileSelect.value = loadTestProfile().id;
       showProfileBudget();
-      profileSelect.addEventListener('change', () => {
+      profileSelect.addEventListener("change", () => {
         saveTestProfile(profileSelect.value);
         showProfileBudget();
       });
@@ -963,22 +1042,22 @@
         });
       }
       document.addEventListener("DOMContentLoaded", () => {
-        const CURRENT_VERSION = '6.0';
+        const CURRENT_VERSION = "6.0";
         const lastVersion = localStorage.getItem("app_version");
         if (lastVersion !== CURRENT_VERSION) {
           console.log(`SpeedPulse: Version update detected (${lastVersion} -> ${CURRENT_VERSION}). Clearing caches & Service Workers...`);
           if ("serviceWorker" in navigator) {
             navigator.serviceWorker.getRegistrations().then((registrations) => {
               for (let registration of registrations) {
-              if (registration.scope === new URL('./', window.location.href).href) registration.unregister();
-            }
+                if (registration.scope === new URL("./", window.location.href).href) registration.unregister();
+              }
             });
           }
           if ("caches" in window) {
             caches.keys().then((names) => {
               for (let name of names) {
-              if (name.startsWith('speedpulse-')) caches.delete(name);
-            }
+                if (name.startsWith("speedpulse-")) caches.delete(name);
+              }
             });
           }
           localStorage.setItem("app_version", CURRENT_VERSION);
@@ -1001,7 +1080,6 @@
         }
         try {
           initChart();
-          
         } catch (e) {
           console.error("Chart Error:", e);
         }

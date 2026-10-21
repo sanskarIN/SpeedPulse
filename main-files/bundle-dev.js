@@ -14,9 +14,15 @@
       function initDevConsole() {
         const logContainer = document.getElementById("dev-log-container");
         const clearLogBtn = document.getElementById("dev-clear-log");
-        setTimeout(() => addLog("[BOOT] Initializing Advanced Diagnostics...", "info"), 100);
+        setTimeout(
+          () => addLog("[BOOT] Initializing Advanced Diagnostics...", "info"),
+          100
+        );
         setTimeout(() => addLog("[BOOT] Injecting Telemetry Hooks...", "info"), 300);
-        setTimeout(() => addLog("[BOOT] Sandbox Ready. Awaiting engine events.", "success"), 600);
+        setTimeout(
+          () => addLog("[BOOT] Sandbox Ready. Awaiting engine events.", "success"),
+          600
+        );
         function addLog(message, type = "info") {
           if (!logContainer) return;
           const div = document.createElement("div");
@@ -24,10 +30,10 @@
           const now = /* @__PURE__ */ new Date();
           const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}.${now.getMilliseconds().toString().padStart(3, "0")}`;
           const stamp = document.createElement("span");
-        stamp.className = "log-time";
-        stamp.textContent = "[" + time + "] ";
-        div.append(stamp, document.createTextNode(String(message).slice(0, 800)));
-        while (logContainer.children.length > 300) logContainer.firstChild.remove();
+          stamp.className = "log-time";
+          stamp.textContent = "[" + time + "] ";
+          div.append(stamp, document.createTextNode(String(message).slice(0, 800)));
+          while (logContainer.children.length > 300) logContainer.firstChild.remove();
           logContainer.appendChild(div);
           logContainer.scrollTop = logContainer.scrollHeight;
         }
@@ -55,16 +61,35 @@
       }
       var fpsEnabled = false;
       function initAdvancedDevControls() {
-        const throttleEnabled = document.getElementById("dev-throttle-enabled");
-        const throttleDown = document.getElementById("dev-throttle-down");
-        const throttleUp = document.getElementById("dev-throttle-up");
-        const injectJitter = document.getElementById("dev-inject-jitter");
-        const packetLoss = document.getElementById("dev-packet-loss");
-        const bypassCache = document.getElementById("dev-bypass-cache");
-        const spoofCores = document.getElementById("dev-spoof-cores");
-        const fpsToggle = document.getElementById("dev-fps-toggle");
-        const savedSettings = JSON.parse(localStorage.getItem("speedpulse_dev_settings") || "{}");
-        if (throttleEnabled) throttleEnabled.checked = savedSettings.throttleEnabled || false;
+        const throttleEnabled = document.getElementById(
+          "dev-throttle-enabled"
+        );
+        const throttleDown = document.getElementById(
+          "dev-throttle-down"
+        );
+        const throttleUp = document.getElementById(
+          "dev-throttle-up"
+        );
+        const injectJitter = document.getElementById(
+          "dev-inject-jitter"
+        );
+        const packetLoss = document.getElementById(
+          "dev-packet-loss"
+        );
+        const bypassCache = document.getElementById(
+          "dev-bypass-cache"
+        );
+        const spoofCores = document.getElementById(
+          "dev-spoof-cores"
+        );
+        const fpsToggle = document.getElementById(
+          "dev-fps-toggle"
+        );
+        const savedSettings = JSON.parse(
+          localStorage.getItem("speedpulse_dev_settings") || "{}"
+        );
+        if (throttleEnabled)
+          throttleEnabled.checked = savedSettings.throttleEnabled || false;
         if (throttleDown) throttleDown.value = savedSettings.throttleDown || "100";
         if (throttleUp) throttleUp.value = savedSettings.throttleUp || "50";
         if (injectJitter) injectJitter.value = savedSettings.injectJitter || "0";
@@ -90,15 +115,23 @@
           fpsEnabled = !!fpsToggle?.checked;
           updateFPSVisibility();
         }
-        [throttleEnabled, throttleDown, throttleUp, injectJitter, packetLoss, bypassCache, spoofCores, fpsToggle].forEach((el) => {
+        [
+          throttleEnabled,
+          throttleDown,
+          throttleUp,
+          injectJitter,
+          packetLoss,
+          bypassCache,
+          spoofCores,
+          fpsToggle
+        ].forEach((el) => {
           if (el) el.addEventListener("change", saveSettings);
         });
         document.getElementById("dev-clear-storage")?.addEventListener("click", () => {
           if (confirm("Clear SpeedPulse-prefixed browser settings only?")) {
-                const appKeys = Object.keys(localStorage).filter((key) =>
-                    key.startsWith("speedpulse_") || key.startsWith("speedpulse-"));
-                appKeys.forEach((key) => localStorage.removeItem(key));
-                console.info("[STORAGE] Removed " + appKeys.length + " SpeedPulse preference keys.");
+            const appKeys = Object.keys(localStorage).filter((key) => key.startsWith("speedpulse_") || key.startsWith("speedpulse-"));
+            appKeys.forEach((key) => localStorage.removeItem(key));
+            console.info("[STORAGE] Removed " + appKeys.length + " SpeedPulse preference keys.");
             saveSettings();
             refreshStateInspector();
           }
@@ -106,8 +139,7 @@
         document.getElementById("dev-clear-sw")?.addEventListener("click", () => {
           if ("serviceWorker" in navigator) {
             navigator.serviceWorker.getRegistrations().then((regs) => {
-              regs.filter((r) => r.scope === new URL("./", location.href).href)
-                    .forEach((r) => r.unregister());
+              regs.filter((r) => r.scope === new URL("./", location.href).href).forEach((r) => r.unregister());
               console.warn("[SW] Terminated all Service Workers.");
             });
           }
@@ -118,8 +150,12 @@
           spawnStressConfetti(300);
         });
         document.getElementById("dev-crash-webgl")?.addEventListener("click", () => {
-          console.error("[GPU] Simulating WebGL context loss... (Not implemented in 2D context)");
-          const canvas = document.getElementById("confetti-canvas");
+          console.error(
+            "[GPU] Simulating WebGL context loss... (Not implemented in 2D context)"
+          );
+          const canvas = document.getElementById(
+            "confetti-canvas"
+          );
           if (canvas) {
             const ctx = canvas.getContext("2d");
             if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -170,7 +206,9 @@
         requestAnimationFrame(loop);
       }
       function spawnStressConfetti(count) {
-        const canvas = document.getElementById("confetti-canvas");
+        const canvas = document.getElementById(
+          "confetti-canvas"
+        );
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
@@ -207,7 +245,11 @@
       }
       function initExtremeFeatures() {
         const spoofGps = document.getElementById("dev-spoof-gps");
-        if (spoofGps) spoofGps.addEventListener("change", () => console.log("[SENSOR] GPS Spoofed"));
+        if (spoofGps)
+          spoofGps.addEventListener(
+            "change",
+            () => console.log("[SENSOR] GPS Spoofed")
+          );
         const themeBtns = document.querySelectorAll(".theme-apply-btn");
         themeBtns.forEach((btn) => {
           btn.addEventListener("click", (e) => {
@@ -234,11 +276,15 @@
                     background-color: ${bg} !important; 
                     background-image: none !important; 
                 }`;
-            console.log(`[THEME ENGINE] Applied theme: Primary(${primary}), BG(${bg})`);
+            console.log(
+              `[THEME ENGINE] Applied theme: Primary(${primary}), BG(${bg})`
+            );
           });
         });
         document.getElementById("dev-trigger-memory-leak")?.addEventListener("click", () => {
-          console.error("[MEMORY] Simulation only: no memory allocation or leak was performed.");
+          console.error(
+            "[MEMORY] Simulation only: no memory allocation or leak was performed."
+          );
         });
         document.getElementById("dev-run-benchmark")?.addEventListener("click", () => {
           console.warn("[BENCHMARK] Running CPU Crypto sequence...");
@@ -249,28 +295,49 @@
             hash |= 0;
           }
           const end = performance.now();
-          console.info(`[BENCHMARK] Crypto sequence completed in ${(end - start).toFixed(2)}ms. Hash Output: ${hash}`);
+          console.info(
+            `[BENCHMARK] Crypto sequence completed in ${(end - start).toFixed(2)}ms. Hash Output: ${hash}`
+          );
         });
       }
       document.addEventListener("DOMContentLoaded", () => {
         initDevConsole();
         initAdvancedDevControls();
         initExtremeFeatures();
-        const outage503 = document.getElementById("dev-outage-503");
+        const outage503 = document.getElementById(
+          "dev-outage-503"
+        );
         const corsFail = document.getElementById("dev-cors-fail");
-        if (outage503) outage503.addEventListener("change", () => {
-          if (outage503.checked) console.error("[DOOMSDAY] Simulation toggle only; real fetch requests are unaffected.");
-          else console.info("[DOOMSDAY] Outage simulation disengaged.");
-        });
-        if (corsFail) corsFail.addEventListener("change", () => {
-          if (corsFail.checked) console.warn("[SECURITY] Simulation toggle only; real browser CORS rules are unchanged.");
-        });
+        if (outage503)
+          outage503.addEventListener("change", () => {
+            if (outage503.checked)
+              console.error(
+                "[DOOMSDAY] Simulation toggle only; real fetch requests are unaffected."
+              );
+            else console.info("[DOOMSDAY] Outage simulation disengaged.");
+          });
+        if (corsFail)
+          corsFail.addEventListener("change", () => {
+            if (corsFail.checked)
+              console.warn(
+                "[SECURITY] Simulation toggle only; real browser CORS rules are unchanged."
+              );
+          });
         document.getElementById("dev-nuke-cdn")?.addEventListener("click", () => {
-          console.error("[CRITICAL] Demo only; DNS and CDN routes are not changed.");
+          console.error(
+            "[CRITICAL] Demo only; DNS and CDN routes are not changed."
+          );
         });
         document.getElementById("dev-reroute-bgp")?.addEventListener("click", () => {
-          console.info("[BGP] Demo only; this page does not control BGP routing.");
-          setTimeout(() => console.info("[BGP] Demo complete: no actual ISP routing changed."), 1500);
+          console.info(
+            "[BGP] Demo only; this page does not control BGP routing."
+          );
+          setTimeout(
+            () => console.info(
+              "[BGP] Demo complete: no actual ISP routing changed."
+            ),
+            1500
+          );
         });
         const cacheInspector = document.getElementById("dev-cache-inspector");
         document.getElementById("dev-inspect-cache")?.addEventListener("click", async () => {
@@ -300,18 +367,23 @@
           if (!("caches" in window)) return;
           const cacheKeys = await caches.keys();
           for (let key of cacheKeys) {
-                if (key.startsWith("speedpulse-")) await caches.delete(key);
+            if (key.startsWith("speedpulse-")) await caches.delete(key);
           }
-          if (cacheInspector) cacheInspector.textContent = "SpeedPulse caches removed; other caches retained.";
+          if (cacheInspector)
+            cacheInspector.textContent = "SpeedPulse caches removed; other caches retained.";
           console.warn("[CACHE API] Removed only SpeedPulse-owned cache entries.");
         });
         document.getElementById("dev-seed-cache")?.addEventListener("click", async () => {
           if (!("caches" in window)) return;
           try {
             const devCache = await caches.open("speedpulse-dev-sandbox-v1");
-            const data = new Blob(['{"status": "simulated_offline", "code": 200}'], { type: "application/json" });
+            const data = new Blob(
+              ['{"status": "simulated_offline", "code": 200}'],
+              { type: "application/json" }
+            );
             await devCache.put("/api/simulated_offline_check", new Response(data));
-            if (cacheInspector) cacheInspector.textContent = "Dummy payload seeded at '/api/simulated_offline_check' in cache 'speedpulse-dev-sandbox-v1'.";
+            if (cacheInspector)
+              cacheInspector.textContent = "Dummy payload seeded at '/api/simulated_offline_check' in cache 'speedpulse-dev-sandbox-v1'.";
             console.info("[CACHE API] Offline injection successful.");
           } catch (e) {
             console.error("[CACHE API] Seed fault.", e);
@@ -327,19 +399,15 @@
           });
         }, 50);
       });
+      (function() {
+        if (document.querySelector("script[data-speedpulse-diagnostics]")) return;
+        const script = document.createElement("script");
+        script.src = "dev-diagnostics.js";
+        script.defer = true;
+        script.dataset.speedpulseDiagnostics = "true";
+        document.head.appendChild(script);
+      })();
     }
   });
   require_developer();
-})();
-
-
-// Load maintained diagnostics without modifying the large legacy HTML file.
-// Kept in the TypeScript entry point so npm run build:labs retains this panel.
-(function () {
-    if (document.querySelector('script[data-speedpulse-diagnostics]')) return;
-    const script = document.createElement('script');
-    script.src = 'dev-diagnostics.js';
-    script.defer = true;
-    script.dataset.speedpulseDiagnostics = 'true';
-    document.head.appendChild(script);
 })();
