@@ -215,6 +215,18 @@
     activeController = null;
     current?.abort();
   }
+  function explainTestError(error, stage, server) {
+    if (error instanceof MeasurementTimeoutError) {
+      return `${stage} timed out after ${Math.ceil(error.timeoutMs / 1e3)} seconds. Try Quick mode or another endpoint.`;
+    }
+    if (error instanceof Error && error.name === "AbortError") return "Test cancelled.";
+    const message = error instanceof Error ? error.message : "";
+    if (/HTTP 429\b/.test(message)) return "The test endpoint is rate-limiting requests (HTTP 429). Try again later.";
+    if (/HTTP 413\b/.test(message)) return "The selected payload exceeds the server limit (HTTP 413). Try Quick mode.";
+    if (/HTTP 5\d\d\b/.test(message)) return `${stage} failed because the server returned an error. Try again later.`;
+    if (error instanceof TypeError) return `${stage} could not reach the ${server === "local" ? "ASP.NET Core" : "Cloudflare"} endpoint. Check connectivity or browser restrictions.`;
+    return `${stage} could not be measured. Check the selected server and retry.`;
+  }
   async function runPingTest(selectedServer = "cloudflare", onProgress = () => {
   }, probeTimeoutMs = LATENCY_TIMEOUT_MS) {
     assertTimeout(probeTimeoutMs, LATENCY_TIMEOUT_MS);
@@ -686,6 +698,7 @@
         const profile = getTestProfile(document.getElementById("test-profile-select").value);
         const serverLimits = server === "local" ? window.speedpulseServerLimits : null;
         const budget = effectiveTestBudget(profile, serverLimits);
+        let activeStage = "ping";
         const finalResult = { isp: document.getElementById("info-isp").textContent, profile: profile.id };
         try {
           setGaugePhase("Finding Optimal Server...");
@@ -694,6 +707,7 @@
           ensureActive();
           setGaugePhase("Connecting...");
           await new Promise((resolve) => setTimeout(resolve, 800));
+          activeStage = "ping";
           ensureActive();
           setGaugePhase("Ping Test");
           gaugeSpeed.textContent = "...";
@@ -704,6 +718,8 @@
           valJitter.textContent = Math.round(jitter).toString();
           finalResult.ping = ping;
           finalResult.jitter = jitter;
+          finalResult.packetLoss = packetLoss;
+          activeStage = "download";
           ensureActive();
           setGaugePhase("Download Test");
           let currentDown = 0;
@@ -718,6 +734,7 @@
           finalResult.download = finalDown;
           updateGauge(0);
           await new Promise((r) => setTimeout(r, 500));
+          activeStage = "upload";
           ensureActive();
           setGaugePhase("Upload Test");
           let currentUp = 0;
@@ -735,7 +752,7 @@
             finalResult.upload = finalUp;
           } catch (error) {
             if (error && error.name === "AbortError") throw error;
-            uploadError = server === "cloudflare" ? "Cloudflare upload request was unavailable (network, CORS, or HTTP failure)." : "The local ASP.NET upload endpoint did not respond successfully.";
+            uploadError = explainTestError(error, "upload", server);
             console.warn("[SpeedPulse] Upload measurement unavailable:", error);
             valUp.textContent = "--";
             progUp.style.width = "0%";
@@ -787,7 +804,7 @@
           if (e.name !== "AbortError") {
             console.error(e);
             setGaugePhase("Error");
-            document.getElementById("grade-desc").textContent = "Could not complete the test: " + (e instanceof Error ? e.message : "network request failed") + ". Try again or change servers.";
+            document.getElementById("grade-desc").textContent = "Could not complete the test: " + explainTestError(e, activeStage, server);
           } else {
             setGaugePhase("Aborted");
           }
@@ -797,7 +814,8 @@
           startBtn.classList.remove("hidden");
           startBtn.textContent = "Retry Test";
           stopBtn.classList.add("hidden");
-          shareBtn.classList.remove("hidden");
+          if (Number.isFinite(finalResult.download)) shareBtn.classList.remove("hidden");
+          else shareBtn.classList.add("hidden");
         }
       }
       function stopCurrentTest() {
