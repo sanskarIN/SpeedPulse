@@ -385,7 +385,7 @@
                     <div class="gauge-readout">
                         <div class="main-speed" id="gauge-speed">0.00</div>
                         <div class="main-unit" id="gauge-unit">Mbps</div>
-                        <div class="current-phase" id="gauge-phase">Ready</div>
+                        <div class="current-phase" id="gauge-phase" role="status" aria-live="polite">Ready</div>
                     </div>
                 </div>
 
@@ -411,7 +411,8 @@
                         <div class="metric-value highlight-down"><span id="val-down">--</span> <small
                                 class="unit-label">Mbps</small></div>
                         <div class="metric-progress">
-                            <div class="progress-bar" id="prog-down"></div>
+                            <div class="progress-bar" id="prog-down" role="progressbar"
+                                aria-label="Downloaded data" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
                         </div>
                     </div>
 
@@ -473,7 +474,7 @@
                     <h2>Readiness Grade</h2>
                     <div class="grade-display">
                         <div class="grade-circle" id="overall-grade">-</div>
-                        <div class="grade-text" id="grade-desc">Run a test to see your grade.</div>
+                        <div class="grade-text" id="grade-desc" role="status" aria-live="polite">Run a test to see your grade.</div>
                     </div>
                     <ul class="readiness-list" id="readiness-list">
                         <li><span class="status-indicator"></span> 4K Streaming</li>
