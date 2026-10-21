@@ -59,11 +59,14 @@ export async function runPingTest(server = 'cloudflare', onProgress) {
     return { ping: avgPing, jitter, packetLoss };
 }
 // 2. Download Test
-export async function runDownloadTest(server = 'cloudflare', onProgress) {
+export async function runDownloadTest(server = 'cloudflare', onProgress, bytes = 25 * 1024 * 1024) {
     controller = new AbortController();
     const target = ENDPOINTS[server].down;
     // Request 25MB chunk
-    const bytesToDownload = 25 * 1024 * 1024;
+    if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > 64 * 1024 * 1024) {
+      throw new RangeError('Invalid download payload size');
+    }
+    const bytesToDownload = bytes;
     const url = `${target}?bytes=${bytesToDownload}&cb=${Date.now()}`;
     const startTime = performance.now();
     let loadedBytes = 0;
@@ -71,7 +74,8 @@ export async function runDownloadTest(server = 'cloudflare', onProgress) {
         const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });
         if (!response.ok)
             throw new Error("Network response was not ok");
-        const reader = response.body.getReader();
+        if (!response.body) throw new Error('Streaming download unavailable');
+    const reader = response.body.getReader();
         while (true) {
             const { done, value } = await reader.read();
             if (done)
@@ -81,7 +85,7 @@ export async function runDownloadTest(server = 'cloudflare', onProgress) {
             const durationSec = (now - startTime) / 1000;
             // Calculate Mbps
             if (durationSec > 0.1) {
-                const mbps = (loadedBytes * 8) / (1024 * 1024) / durationSec;
+                const mbps = (loadedBytes * 8) / 1e6 / durationSec;
                 onProgress(mbps);
             }
         }
@@ -90,14 +94,17 @@ export async function runDownloadTest(server = 'cloudflare', onProgress) {
         throw e;
     }
     const totalDurationSec = (performance.now() - startTime) / 1000;
-    return totalDurationSec > 0 ? (loadedBytes * 8) / (1024 * 1024) / totalDurationSec : 0;
+    return totalDurationSec > 0 ? (loadedBytes * 8) / 1e6 / totalDurationSec : 0;
 }
 // 3. Upload Test
-export async function runUploadTest(server = 'cloudflare', onProgress) {
+export async function runUploadTest(server = 'cloudflare', onProgress, bytes = 5 * 1024 * 1024) {
     controller = new AbortController();
     const target = ENDPOINTS[server].up;
     // Fetch doesn't expose upload byte progress. Report only a completed, checked result.
-    const payloadSize = 5 * 1024 * 1024;
+    if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > 8 * 1024 * 1024) {
+      throw new RangeError('Invalid upload payload size');
+    }
+    const payloadSize = bytes;
     const buffer = new Uint8Array(payloadSize);
     for (let i = 0; i < payloadSize; i++) buffer[i] = Math.random() * 255;
     const start = performance.now();
@@ -111,7 +118,7 @@ export async function runUploadTest(server = 'cloudflare', onProgress) {
     });
     if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
     const durationSec = (performance.now() - start) / 1000;
-    const measuredMbps = durationSec > 0 ? (payloadSize * 8) / (1024 * 1024) / durationSec : 0;
+    const measuredMbps = durationSec > 0 ? (payloadSize * 8) / 1e6 / durationSec : 0;
     onProgress(measuredMbps);
     return measuredMbps;
 }
