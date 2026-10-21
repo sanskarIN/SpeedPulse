@@ -4,17 +4,24 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using SpeedPulse;
 
 const int mib = 1024 * 1024;
-const int defaultDownloadBytes = 25 * mib;
-const int maxDownloadBytes = 64 * mib;
-const int maxUploadBytes = 8 * mib;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
     WebRootPath = "main-files"
 });
+
+// Environment variables such as SpeedPulse__MaxDownloadBytes override appsettings.
+// Clamping protects the host even if configuration is accidentally unsafe.
+var configured = builder.Configuration.GetSection("SpeedPulse").Get<SpeedPulseOptions>()
+    ?? new SpeedPulseOptions();
+var maxDownloadBytes = Math.Clamp(configured.MaxDownloadBytes, mib, 64 * mib);
+var maxUploadBytes = Math.Clamp(configured.MaxUploadBytes, mib, 8 * mib);
+var defaultDownloadBytes = Math.Min(25 * mib, maxDownloadBytes);
+var rateLimitRequestsPerMinute = Math.Clamp(configured.RateLimitRequestsPerMinute, 10, 120);
 
 // No wildcard CORS: the web UI and /api routes share an origin in self-hosted mode.
 // This is a demo test server: use access controls when exposing it beyond a trusted LAN.
@@ -30,7 +37,7 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 60,
+                PermitLimit = rateLimitRequestsPerMinute,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
@@ -64,7 +71,16 @@ app.MapGet("/api/config", (HttpContext context) =>
         defaultDownloadBytes,
         maxDownloadBytes,
         maxUploadBytes,
-        rateLimitRequestsPerMinute = 60
+        rateLimitRequestsPerMinute,
+        profiles = new[]
+        {
+            new { id = "quick", downloadBytes = Math.Min(5 * mib, maxDownloadBytes),
+                uploadBytes = Math.Min(mib, maxUploadBytes) },
+            new { id = "standard", downloadBytes = Math.Min(25 * mib, maxDownloadBytes),
+                uploadBytes = Math.Min(5 * mib, maxUploadBytes) },
+            new { id = "thorough", downloadBytes = Math.Min(50 * mib, maxDownloadBytes),
+                uploadBytes = Math.Min(8 * mib, maxUploadBytes) }
+        }
     });
 });
 
