@@ -109,6 +109,7 @@ async function connectCdp(url) {
 
 const mockNetwork = `(() => {
   const smoke = window.__speedpulseSmoke = { requests: [], alerts: [], errors: [], mode: 'success' };
+  try { localStorage.setItem('app_version', '6.0'); } catch {}
   window.alert = message => smoke.alerts.push(String(message));
   window.addEventListener('error', event => smoke.errors.push(String(event.message || 'unknown')));
   window.addEventListener('unhandledrejection', event => {
