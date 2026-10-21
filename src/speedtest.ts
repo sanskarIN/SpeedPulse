@@ -5,7 +5,7 @@
  */
 export type SpeedServer = 'cloudflare' | 'local';
 export type TestStage = 'ping' | 'download' | 'upload';
-export type ProgressListener = (value: number) => void;
+export type ProgressListener = (value: number, completedFraction?: number) => void;
 export interface PingResult {
     ping: number;
     jitter: number;
@@ -102,10 +102,10 @@ function withDeadline<T>(
     });
 }
 
-function safeProgress(onProgress: ProgressListener, value: number, signal: AbortSignal): void {
+function safeProgress(onProgress: ProgressListener, value: number, signal: AbortSignal, completedFraction?: number): void {
     if (signal.aborted) throw cancelled();
     try {
-        onProgress(value);
+        onProgress(value, completedFraction);
     } catch (error) {
         // A missing chart or an optional UI widget must not cancel a valid test.
         console.warn('[SpeedPulse] Ignoring presentation callback error:', error);
@@ -207,7 +207,7 @@ export async function runDownloadTest(
                 if (done) break;
                 received += value.byteLength;
                 const seconds = (performance.now() - start) / 1000;
-                if (seconds > 0.1) safeProgress(onProgress, received * 8 / 1_000_000 / seconds, signal);
+                if (seconds > 0.1) safeProgress(onProgress, received * 8 / 1_000_000 / seconds, signal, Math.min(1, received / bytes));
             }
         } finally {
             if (signal.aborted) {
@@ -215,10 +215,12 @@ export async function runDownloadTest(
                 void reader.cancel().catch(() => {});
             }
         }
-        if (!received) throw new Error('Download returned no bytes');
+        if (received !== bytes) {
+            throw new Error(`Incomplete download: expected ${bytes} bytes, received ${received}`);
+        }
         const seconds = (performance.now() - start) / 1000;
         const measured = seconds > 0 ? received * 8 / 1_000_000 / seconds : 0;
-        safeProgress(onProgress, measured, signal);
+        safeProgress(onProgress, measured, signal, 1);
         return measured;
     });
 }
