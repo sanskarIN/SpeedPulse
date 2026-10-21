@@ -2,10 +2,10 @@
  * SpeedPulse - Main Application Script
  */
 
-declare const Chart: any;
 declare const html2canvas: any;
 
 import { formatSpeed, playSound, calculateGrade, fireConfetti } from './utils.js';
+import { initChart, updateChartTheme, addChartPoint, clearChart } from './dashboard-chart.js';
 import { runPingTest, runDownloadTest, runUploadTest, abortTest, explainTestError } from './speedtest.js';
 import { getTestProfile, loadTestProfile, saveTestProfile, effectiveTestBudget } from './test-profiles.js';
 import type { ServerBudgetLimits } from './test-profiles.js';
@@ -35,131 +35,6 @@ const progUp = document.getElementById('prog-up');
 let isTesting = false;
 let testGeneration = 0;
 let currentPhase = 'idle'; // idle, ping, download, upload, finished
-let speedChart = null;
-let chartDataDown = [];
-let chartDataUp = [];
-let chartLabels = [];
-
-// Initialize Chart.js
-function initChart() {
-    try {
-        const chartEl = document.getElementById('speedChart') as HTMLCanvasElement;
-        if (!chartEl || typeof Chart === 'undefined') {
-            console.warn("SpeedPulse: Chart.js not loaded or canvas missing. Skipping chart.");
-            return;
-        }
-        
-        const ctx = chartEl.getContext('2d')!;
-        const theme = document.documentElement.getAttribute('data-theme');
-        let color = '#475569';
-        
-        if (theme === 'dark') color = '#94a3b8';
-        else if (theme === 'custom') {
-            const config = JSON.parse(localStorage.getItem('custom_theme_config') || '{"base":"dark"}');
-            color = config.base === 'dark' ? '#94a3b8' : '#475569';
-        }
-
-        Chart.defaults.color = color;
-        speedChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: chartLabels,
-            datasets: [
-                {
-                    label: 'Download',
-                    data: chartDataDown,
-                    borderColor: '#06b6d4',
-                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 0
-                },
-                {
-                    label: 'Upload',
-                    data: chartDataUp,
-                    borderColor: '#8b5cf6',
-                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 0
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: { duration: 0 }, // fast updates
-            scales: {
-                x: { display: false },
-                y: {
-                    beginAtZero: true,
-                    grid: { color: 'rgba(150, 150, 150, 0.1)' }
-                }
-            },
-            plugins: { legend: { display: false } }
-        }
-    });
-    } catch (e) {
-        console.error("Chart initialization failed", e);
-    }
-}
-
-function updateChartTheme() {
-    if (speedChart) {
-        const theme = document.documentElement.getAttribute('data-theme');
-        let color = '#475569'; // Default light color
-        
-        if (theme === 'dark') {
-            color = '#94a3b8';
-        } else if (theme === 'custom') {
-            try {
-                const config = JSON.parse(localStorage.getItem('custom_theme_config') || '{"base":"dark"}');
-                color = config.base === 'dark' ? '#94a3b8' : '#475569';
-            } catch (e) {
-                color = '#94a3b8';
-            }
-        }
-        
-        Chart.defaults.color = color;
-        if (speedChart.options.scales.x) speedChart.options.scales.x.ticks.color = color;
-        if (speedChart.options.scales.y) speedChart.options.scales.y.ticks.color = color;
-        speedChart.update();
-    }
-}
-
-function addChartPoint(val, isDown) {
-    // Chart actual download/upload samples only. Do not invent latency readings.
-    if (!speedChart) return;
-    const now = new Date().toLocaleTimeString();
-    chartLabels.push(now);
-
-    if (isDown) {
-        chartDataDown.push(val);
-        chartDataUp.push(null);
-    } else {
-        chartDataDown.push(null);
-        chartDataUp.push(val);
-    }
-
-    // Keep last 50 points
-    if (chartLabels.length > 50) {
-        chartLabels.shift();
-        chartDataDown.shift();
-        chartDataUp.shift();
-    }
-
-    speedChart.update();
-}
-
-function clearChart() {
-    chartLabels.length = 0;
-    chartDataDown.length = 0;
-    chartDataUp.length = 0;
-    if (speedChart) speedChart.update();
-}
-
 // Update UI
 function setGaugePhase(phase) {
     gaugePhase.textContent = phase;
