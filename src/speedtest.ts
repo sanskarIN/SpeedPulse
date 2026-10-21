@@ -1,140 +1,147 @@
 /**
- * SpeedPulse - Speed Test Engine
- * Handles Ping, Download, and Upload testing logic.
+ * Browser speed-test engine. Transfer sizes are controlled by the selected
+ * typed data budget; server-side ASP.NET limits are an independent safeguard.
  */
+export type SpeedServer = 'cloudflare' | 'local';
+export type ProgressListener = (mbps: number) => void;
+export interface PingResult {
+    ping: number;
+    jitter: number;
+    packetLoss: number; // failed HTTP probes, not actual IP packet loss
+}
 
-const ENDPOINTS: Record<string, { down: string, up: string }> = {
-    local: {
-        down: '/api/down',
-        up: '/api/up'
-    },
+export const MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+const ENDPOINTS: Readonly<Record<SpeedServer, { down: string; up: string }>> = {
+    local: { down: '/api/down', up: '/api/up' },
     cloudflare: {
         down: 'https://speed.cloudflare.com/__down',
-        up: 'https://speed.cloudflare.com/__up'
-    }
+        up: 'https://speed.cloudflare.com/__up',
+    },
 };
 
-// If opened via file:// protocol directly in the browser, 
-// the local ASP.NET server won't be reachable via relative '/api/' paths.
-// We force it to use Cloudflare in this standalone mode.
+let controller: AbortController | null = null;
 const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
 
-let controller = null;
+function resolveServer(server: SpeedServer): SpeedServer {
+    return server === 'local' && isFileProtocol ? 'cloudflare' : server;
+}
 
-export function abortTest() {
-    if (controller) {
-        controller.abort();
-        controller = null;
+function assertBytes(bytes: number, max: number): void {
+    if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > max) {
+        throw new RangeError(`Test payload must be between 1 and ${max} bytes`);
     }
 }
 
-// 1. Ping Test
-export async function runPingTest(server = 'cloudflare', onProgress) {
-    if (server === 'local' && isFileProtocol) server = 'cloudflare';
-    controller = new AbortController();
+export function abortTest(): void {
+    controller?.abort();
+    controller = null;
+}
+
+export async function runPingTest(
+    selectedServer: SpeedServer = 'cloudflare',
+    onProgress: ProgressListener = () => {},
+): Promise<PingResult> {
+    const server = resolveServer(selectedServer);
+    const signal = (controller = new AbortController()).signal;
     const target = ENDPOINTS[server].down;
     const iterations = 10;
-    const pings = [];
+    const readings: number[] = [];
     let failed = 0;
 
     for (let i = 0; i < iterations; i++) {
-        if (controller.signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
+        if (signal.aborted) throw new DOMException('Speed test cancelled', 'AbortError');
         const start = performance.now();
         try {
-            // Cache buster to avoid cached responses
             const response = await fetch(`${target}?bytes=0&cb=${Date.now()}_${i}`, {
-                method: "GET",
-                signal: controller.signal,
-                cache: 'no-store'
+                method: 'GET',
+                signal,
+                cache: 'no-store',
             });
-            if (!response.ok) throw new Error(`HTTP ${response.status} during latency probe`);
-        const duration = performance.now() - start;
-            pings.push(duration);
-            onProgress(duration);
-        } catch (e) {
-            if (e.name === "AbortError") throw e;
+            if (!response.ok) throw new Error(`Latency probe returned HTTP ${response.status}`);
+            const elapsed = performance.now() - start;
+            readings.push(elapsed);
+            onProgress(elapsed);
+        } catch (error) {
+            if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
             failed++;
         }
     }
 
-    if (pings.length === 0) throw new Error("Ping test failed completely");
-
-    const avgPing = pings.reduce((a, b) => a + b, 0) / pings.length;
-
-    // Calculate jitter (average of absolute differences between consecutive pings)
-    let jitterSum = 0;
-    for (let i = 1; i < pings.length; i++) {
-        jitterSum += Math.abs(pings[i] - pings[i - 1]);
+    if (!readings.length) throw new Error('All latency probes failed');
+    const ping = readings.reduce((a, b) => a + b, 0) / readings.length;
+    let sum = 0;
+    for (let i = 1; i < readings.length; i++) {
+        sum += Math.abs(readings[i] - readings[i - 1]);
     }
-    const jitter = pings.length > 1 ? jitterSum / (pings.length - 1) : 0;
-
-    const packetLoss = (failed / iterations) * 100;
-
-    return { ping: avgPing, jitter, packetLoss };
+    return {
+        ping,
+        jitter: readings.length > 1 ? sum / (readings.length - 1) : 0,
+        packetLoss: failed / iterations * 100,
+    };
 }
 
-// 2. Download Test
-export async function runDownloadTest(server = 'cloudflare', onProgress) {
-    if (server === 'local' && isFileProtocol) server = 'cloudflare';
-    controller = new AbortController();
+export async function runDownloadTest(
+    selectedServer: SpeedServer = 'cloudflare',
+    onProgress: ProgressListener = () => {},
+    bytes: number = 25 * 1024 * 1024,
+): Promise<number> {
+    assertBytes(bytes, MAX_DOWNLOAD_BYTES);
+    const server = resolveServer(selectedServer);
+    const signal = (controller = new AbortController()).signal;
     const target = ENDPOINTS[server].down;
+    const start = performance.now();
+    let received = 0;
+    const response = await fetch(`${target}?bytes=${bytes}&cb=${Date.now()}`, {
+        signal,
+        cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`Download returned HTTP ${response.status}`);
+    if (!response.body) throw new Error('Streaming download is unavailable in this browser');
+    const reader = response.body.getReader();
 
-    // Request 25MB chunk
-    const bytesToDownload = 25 * 1024 * 1024;
-    const url = `${target}?bytes=${bytesToDownload}&cb=${Date.now()}`;
-
-    const startTime = performance.now();
-    let loadedBytes = 0;
-
-    try {
-        const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });
-        if (!response.ok) throw new Error("Network response was not ok");
-
-        const reader = response.body.getReader();
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            loadedBytes += value.length;
-            const now = performance.now();
-            const durationSec = (now - startTime) / 1000;
-
-            // Calculate Mbps
-            if (durationSec > 0.1) {
-                const mbps = (loadedBytes * 8) / (1024 * 1024) / durationSec;
-                onProgress(mbps);
-            }
-        }
-    } catch (e) {
-        throw e;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        const elapsed = (performance.now() - start) / 1000;
+        if (elapsed > 0.1) onProgress(received * 8 / 1_000_000 / elapsed);
     }
 
-    const totalDurationSec = (performance.now() - startTime) / 1000;
-    return totalDurationSec > 0 ? (loadedBytes * 8) / (1024 * 1024) / totalDurationSec : 0;
+    if (signal.aborted) throw new DOMException('Speed test cancelled', 'AbortError');
+    if (!received) throw new Error('Download returned no bytes');
+    const seconds = (performance.now() - start) / 1000;
+    const measured = seconds > 0 ? received * 8 / 1_000_000 / seconds : 0;
+    onProgress(measured);
+    return measured;
 }
 
-// 3. Upload Test
-export async function runUploadTest(server = 'cloudflare', onProgress) {
-    if (server === 'local' && isFileProtocol) server = 'cloudflare';
-    controller = new AbortController();
+export async function runUploadTest(
+    selectedServer: SpeedServer = 'cloudflare',
+    onProgress: ProgressListener = () => {},
+    bytes: number = 5 * 1024 * 1024,
+): Promise<number> {
+    assertBytes(bytes, MAX_UPLOAD_BYTES);
+    const server = resolveServer(selectedServer);
+    const signal = (controller = new AbortController()).signal;
     const target = ENDPOINTS[server].up;
-    // Fetch doesn't expose upload byte progress. Report only a completed, checked result.
-    const payloadSize = 5 * 1024 * 1024;
-    const buffer = new Uint8Array(payloadSize);
-    for (let i = 0; i < payloadSize; i++) buffer[i] = Math.random() * 255;
+    const buffer = new Uint8Array(bytes);
+    // Content entropy reduces opportunities for intermediary compression.
+    for (let i = 0; i < buffer.length; i++) buffer[i] = Math.random() * 256;
+    const body = new Blob([buffer], { type: 'text/plain' });
+    const uploadUrl = server === 'cloudflare' ? `${target}?bytes=${bytes}` : target;
     const start = performance.now();
-    // Cloudflare's upload API expects a bytes parameter; the local server ignores it.
-    const uploadUrl = server === 'cloudflare' ? target + '?bytes=' + payloadSize : target;
     const response = await fetch(uploadUrl, {
         method: 'POST',
-        body: new Blob([buffer], { type: 'text/plain' }),
+        body,
         mode: 'cors',
-        signal: controller.signal
+        signal,
     });
     if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
-    const durationSec = (performance.now() - start) / 1000;
-    const measuredMbps = durationSec > 0 ? (payloadSize * 8) / (1024 * 1024) / durationSec : 0;
-    onProgress(measuredMbps);
-    return measuredMbps;
+    if (signal.aborted) throw new DOMException('Speed test cancelled', 'AbortError');
+    const seconds = (performance.now() - start) / 1000;
+    const measured = seconds > 0 ? bytes * 8 / 1_000_000 / seconds : 0;
+    onProgress(measured);
+    return measured;
 }
