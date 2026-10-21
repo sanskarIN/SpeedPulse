@@ -127,8 +127,16 @@ These changes are **not included in the published v1.0.0 tag**.
   exposes effective profile caps through `GET /api/config`.
 - The typed browser engine uses decimal Mbps; malformed history data is
   filtered and exported CSV values are escaped safely.
-- `npm run typecheck:engine` checks the growing strongly typed TypeScript
-  modules, and CI keeps deployable bundles synchronized with the source.
+- `npm run typecheck:engine` strictly checks typed measurement, history,
+  chart, profile, and readiness modules. The remaining legacy UI script is
+  being modularized incrementally.
+- The chart adapter and readiness heuristics now live in their own TypeScript
+  modules. Missing measurements appear as **unknown**, rather than a false
+  speed or an automatic failure.
+- CI builds the frontend, runs unit tests and a real headless Chromium browser
+  smoke test (with bandwidth endpoint calls mocked), builds ASP.NET Core 10,
+  and tests its HTTP endpoints. Verified browser bundles are synchronized
+  automatically with the TypeScript sources.
 
 Read the [post-v1.0.0 development guide](./docs/post-v1.0.0-development.md)
 for configuration, transfer budgets, test coverage, and release boundaries.
