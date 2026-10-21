@@ -234,7 +234,13 @@ async function main() {
     }
     await new Promise(resolve => server.close(resolve));
     // Chrome can briefly hold profile files after DevTools has closed.
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 12, retryDelay: 200 });
+    try {
+      fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch (error) {
+      // Chrome's crash-handler subprocess can keep the temporary profile open
+      // briefly on hosted runners. Runner teardown handles remaining temp files.
+      console.warn('[SpeedPulse browser smoke] Chrome profile cleanup deferred:', error.code);
+    }
   }
 }
 
