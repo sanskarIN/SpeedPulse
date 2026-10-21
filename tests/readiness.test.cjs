@@ -16,7 +16,7 @@ const { calculateReadiness, READINESS_ORDER } = exports;
 
 test('real measured values classify supported readiness hints', () => {
   const result = calculateReadiness({ download: 500, upload: 50, ping: 10, jitter: 2 });
-  assert.deepEqual(READINESS_ORDER, ['streaming4K','videoCalls','gaming','largeUploads']);
+  assert.deepEqual(Array.from(READINESS_ORDER), ['streaming4K','videoCalls','gaming','largeUploads']);
   for (const key of READINESS_ORDER) assert.equal(result[key], 'pass');
 });
 
