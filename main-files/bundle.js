@@ -329,6 +329,26 @@
     }
   });
 
+  // src/test-profiles.ts — built-in data budgets (no backend dependency).
+  var TEST_PROFILES = Object.freeze({
+    quick: Object.freeze({ id: 'quick', downloadBytes: 5 * 1024 * 1024, uploadBytes: 1 * 1024 * 1024 }),
+    standard: Object.freeze({ id: 'standard', downloadBytes: 25 * 1024 * 1024, uploadBytes: 5 * 1024 * 1024 }),
+    thorough: Object.freeze({ id: 'thorough', downloadBytes: 50 * 1024 * 1024, uploadBytes: 8 * 1024 * 1024 })
+  });
+  function getTestProfile(input) {
+    return typeof input === 'string' && Object.prototype.hasOwnProperty.call(TEST_PROFILES, input)
+      ? TEST_PROFILES[input] : TEST_PROFILES.standard;
+  }
+  function loadTestProfile() {
+    try { return getTestProfile(localStorage.getItem('speedpulse_test_profile')); }
+    catch { return TEST_PROFILES.standard; }
+  }
+  function saveTestProfile(input) {
+    const profile = getTestProfile(input);
+    try { localStorage.setItem('speedpulse_test_profile', profile.id); } catch {}
+    return profile;
+  }
+
   // src/script.ts
   var require_script = __commonJS({
     "src/script.ts"() {
@@ -503,7 +523,8 @@
         document.querySelectorAll(".status-indicator").forEach((el) => el.className = "status-indicator");
         try { playSound('start'); } catch (error) { console.warn('Audio notification skipped:', error); }
         const server = document.getElementById("server-select").value;
-        const finalResult = { isp: document.getElementById("info-isp").textContent };
+        const profile = getTestProfile(document.getElementById('test-profile-select').value);
+        const finalResult = { isp: document.getElementById("info-isp").textContent, profile: profile.id };
         try {
           setGaugePhase("Finding Optimal Server...");
           gaugeSpeed.textContent = "...";
@@ -529,7 +550,7 @@
             updateGauge(mbps);
             valDown.textContent = formatSpeed(mbps, document.getElementById("unit-select").value);
             addChartPoint(mbps, true);
-          });
+          }, profile.downloadBytes);
           valDown.textContent = formatSpeed(finalDown, document.getElementById("unit-select").value);
           progDown.style.width = "100%";
           finalResult.download = finalDown;
@@ -546,7 +567,7 @@
             updateGauge(mbps);
             valUp.textContent = formatSpeed(mbps, document.getElementById("unit-select").value);
             addChartPoint(mbps, false);
-          });
+          }, profile.uploadBytes);
             valUp.textContent = formatSpeed(finalUp, document.getElementById('unit-select').value);
             progUp.style.width = '100%';
             finalResult.upload = finalUp;
@@ -887,11 +908,25 @@
           if (history.length > 0) {
             const last = history[0];
             valDown.textContent = formatSpeed(last.download, document.getElementById("unit-select").value);
-            valUp.textContent = formatSpeed(last.upload, document.getElementById("unit-select").value);
+            valUp.textContent = Number.isFinite(last.upload) ? formatSpeed(last.upload, document.getElementById("unit-select").value) : '--';
             updateGauge(last.download);
           }
         }
         document.querySelectorAll(".unit-label").forEach((el) => el.textContent = document.getElementById("unit-select").value);
+      });
+      const profileSelect = document.getElementById('test-profile-select');
+      const budgetNote = document.getElementById('profile-budget-note');
+      function showProfileBudget() {
+        const profile = getTestProfile(profileSelect.value);
+        const totalMiB = (profile.downloadBytes + profile.uploadBytes) / (1024 * 1024);
+        if (budgetNote) budgetNote.textContent =
+          profile.id + ': about ' + totalMiB + ' MiB payload per test (plus network overhead).';
+      }
+      profileSelect.value = loadTestProfile().id;
+      showProfileBudget();
+      profileSelect.addEventListener('change', () => {
+        saveTestProfile(profileSelect.value);
+        showProfileBudget();
       });
       startBtn.addEventListener("click", startTest);
       stopBtn.addEventListener("click", stopCurrentTest);
@@ -954,7 +989,7 @@
         }
         try {
           initChart();
-          initLatencyChart();
+          
         } catch (e) {
           console.error("Chart Error:", e);
         }
