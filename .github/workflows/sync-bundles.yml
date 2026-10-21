@@ -1,0 +1,51 @@
+name: Sync TypeScript browser bundles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - '.github/workflows/sync-bundles.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: speedpulse-bundle-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Compile and commit browser bundles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install, typecheck, and test
+        run: |
+          npm ci
+          npm run typecheck:engine
+          npm test
+      - name: Compile TypeScript applications
+        run: npm run build
+      - name: Keep committed assets synchronized with source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add main-files/bundle.js main-files/bundle-dev.js main-files/dev-diagnostics.js
+          if git diff --cached --quiet; then
+            echo "All generated browser bundles are already current."
+            exit 0
+          fi
+          git config user.name 'Sanskar'
+          git config user.email 'sanskarin@outlook.in'
+          git -c user.name='Sanskar' -c user.email='sanskarin@outlook.in' \
+            commit -m "build(typescript): sync browser bundles with typed sources"
+          git push origin HEAD:main
