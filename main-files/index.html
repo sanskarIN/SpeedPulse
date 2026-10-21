@@ -299,6 +299,18 @@
                     </small>
                 </div>
                 <div class="control-group">
+                    <label for="test-profile-select" class="visually-hidden">Speed test data budget</label>
+                    <select id="test-profile-select" aria-label="Speed test data budget" title="Choose the data used by the next test">
+                        <option value="quick">Quick (5 MiB down, 1 MiB up)</option>
+                        <option value="standard" selected>Standard (25 MiB down, 5 MiB up)</option>
+                        <option value="thorough">Thorough (50 MiB down, 8 MiB up)</option>
+                    </select>
+                    <small id="profile-budget-note" role="status" aria-live="polite"
+                        style="display:block;font-size:.72rem;line-height:1.35;margin-top:.3rem;color:var(--text-secondary);">
+                        Standard: about 30 MiB of test payload; network overhead extra.
+                    </small>
+                </div>
+                <div class="control-group">
                     <label for="unit-select" class="visually-hidden">Select Unit</label>
                     <select id="unit-select" aria-label="Select speed unit">
                         <option value="Mbps">Mbps</option>
