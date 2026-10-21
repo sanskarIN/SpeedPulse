@@ -7,7 +7,8 @@ declare const html2canvas: any;
 
 import { formatSpeed, playSound, calculateGrade, fireConfetti } from './utils.js';
 import { runPingTest, runDownloadTest, runUploadTest, abortTest } from './speedtest.js';
-import { getTestProfile, loadTestProfile, saveTestProfile } from './test-profiles.js';
+import { getTestProfile, loadTestProfile, saveTestProfile, effectiveTestBudget } from './test-profiles.js';
+import type { ServerBudgetLimits } from './test-profiles.js';
 import type { SpeedServer } from './speedtest.js';
 import { getHistory, saveResult, clearHistory, exportToCSV } from './history.js';
 
@@ -215,6 +216,10 @@ async function startTest() {
     const server = (document.getElementById('server-select') as HTMLSelectElement).value as SpeedServer;
     // Freeze the budget for this run, even if the user later changes preferences.
     const profile = getTestProfile((document.getElementById('test-profile-select') as HTMLSelectElement).value);
+    const serverLimits = server === 'local'
+        ? (window as Window & { speedpulseServerLimits?: ServerBudgetLimits }).speedpulseServerLimits
+        : null;
+    const budget = effectiveTestBudget(profile, serverLimits);
     const finalResult: { isp: string | null; profile: string; ping?: number; jitter?: number; download?: number; upload?: number } =
         { isp: document.getElementById('info-isp').textContent, profile: profile.id };
 
@@ -249,7 +254,7 @@ async function startTest() {
             updateGauge(mbps);
             valDown.textContent = formatSpeed(mbps, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
             addChartPoint(mbps, true);
-        }, profile.downloadBytes);
+        }, budget.downloadBytes);
         valDown.textContent = formatSpeed(finalDown, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
         progDown.style.width = '100%';
         finalResult.download = finalDown;
@@ -270,7 +275,7 @@ async function startTest() {
             updateGauge(mbps);
             valUp.textContent = formatSpeed(mbps, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
             addChartPoint(mbps, false);
-          }, profile.uploadBytes);
+          }, budget.uploadBytes);
           valUp.textContent = formatSpeed(finalUp, document.getElementById('unit-select').value);
           progUp.style.width = '100%';
           finalResult.upload = finalUp;
