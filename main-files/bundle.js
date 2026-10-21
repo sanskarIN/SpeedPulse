@@ -202,10 +202,10 @@
       }
     });
   }
-  function safeProgress(onProgress, value, signal) {
+  function safeProgress(onProgress, value, signal, completedFraction) {
     if (signal.aborted) throw cancelled();
     try {
-      onProgress(value);
+      onProgress(value, completedFraction);
     } catch (error) {
       console.warn("[SpeedPulse] Ignoring presentation callback error:", error);
     }
@@ -290,7 +290,7 @@
           if (done) break;
           received += value.byteLength;
           const seconds2 = (performance.now() - start) / 1e3;
-          if (seconds2 > 0.1) safeProgress(onProgress, received * 8 / 1e6 / seconds2, signal);
+          if (seconds2 > 0.1) safeProgress(onProgress, received * 8 / 1e6 / seconds2, signal, Math.min(1, received / bytes));
         }
       } finally {
         if (signal.aborted) {
@@ -298,10 +298,12 @@
           });
         }
       }
-      if (!received) throw new Error("Download returned no bytes");
+      if (received !== bytes) {
+        throw new Error(`Incomplete download: expected ${bytes} bytes, received ${received}`);
+      }
       const seconds = (performance.now() - start) / 1e3;
       const measured = seconds > 0 ? received * 8 / 1e6 / seconds : 0;
-      safeProgress(onProgress, measured, signal);
+      safeProgress(onProgress, measured, signal, 1);
       return measured;
     });
   }
@@ -723,8 +725,11 @@
           ensureActive();
           setGaugePhase("Download Test");
           let currentDown = 0;
-          const finalDown = await runDownloadTest(server, (mbps) => {
+          const finalDown = await runDownloadTest(server, (mbps, completedFraction) => {
             currentDown = mbps;
+            if (typeof completedFraction === "number") {
+              progDown.style.width = (Math.min(1, Math.max(0, completedFraction)) * 100).toFixed(1) + "%";
+            }
             updateGauge(mbps);
             valDown.textContent = formatSpeed(mbps, document.getElementById("unit-select").value);
             addChartPoint(mbps, true);
