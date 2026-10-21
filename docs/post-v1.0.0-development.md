@@ -89,6 +89,45 @@ bodies, truncated downloads, explicit cancellation and invalid timeout values.
 These browser-level measurements remain estimates affected by latency, device
 overhead, and the selected test server.
 
+## Dashboard TypeScript architecture and browser regression tests
+
+The main dashboard now imports two extracted, independently testable modules:
+
+- `src/dashboard-chart.ts`: owns Chart.js initialization, changing themes,
+  a bounded 50-point download/upload buffer, and a graceful fallback when the
+  Chart.js CDN is unavailable. It never creates synthetic latency readings.
+- `src/readiness.ts`: owns typed heuristic suitability indicators. The UI
+  distinguishes passing, failing and **unknown** states. A missing upload or
+  other incomplete reading cannot become a false failure.
+
+Both modules are part of `npm run typecheck:engine`; the remaining legacy
+dashboard code is progressively being migrated into independently typechecked
+modules. Do not assume all of `src/script.ts` is strict-typed yet.
+
+A deterministic browser smoke test at `scripts/browser-smoke.cjs` uses a
+local HTTP server and a real headless Chrome/Chromium process via the Chrome
+DevTools Protocol. It requires Node.js 22+ and an installed Chrome/Chromium.
+The smoke test injects a simulated response **only for Cloudflare measurement
+requests**, so it does not run real bandwidth benchmarks. It verifies:
+
+1. Quick profile selection and estimated 6 MiB payload caption.
+2. Dashboard completion with ping, download, and upload populated.
+3. Actual byte-based download progress reaching 100 percent.
+4. A second request that intentionally stalls, followed by working Stop.
+5. No blocking alerts or uncaught browser script errors.
+
+Run locally after building:
+
+```bash
+npm ci
+npm run build
+node scripts/browser-smoke.cjs
+```
+
+The GitHub Actions frontend CI job runs this smoke test after unit tests,
+TypeScript checks, and the frontend build. ASP.NET Core continues to have
+separate real HTTP smoke tests for its own endpoints.
+
 ## Tests and generated code
 
 ```bash
