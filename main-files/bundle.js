@@ -693,6 +693,7 @@
       var valDown = document.getElementById("val-down");
       var valUp = document.getElementById("val-up");
       var progDown = document.getElementById("prog-down");
+      var downloadProgressLabel = document.getElementById("download-progress-label");
       var progUp = document.getElementById("prog-up");
       var isTesting = false;
       var testGeneration = 0;
@@ -730,6 +731,7 @@
         valUp.textContent = "--";
         progDown.style.width = "0%";
         progDown.setAttribute("aria-valuenow", "0");
+        if (downloadProgressLabel) downloadProgressLabel.textContent = "0%";
         progUp.style.width = "0%";
         updateGauge(0);
         clearChart();
@@ -776,6 +778,7 @@
               const percent = (Math.min(1, Math.max(0, completedFraction)) * 100).toFixed(1);
               progDown.style.width = percent + "%";
               progDown.setAttribute("aria-valuenow", percent);
+              if (downloadProgressLabel) downloadProgressLabel.textContent = percent + "%";
             }
             updateGauge(mbps);
             valDown.textContent = formatSpeed(mbps, document.getElementById("unit-select").value);
@@ -784,6 +787,7 @@
           valDown.textContent = formatSpeed(finalDown, document.getElementById("unit-select").value);
           progDown.style.width = "100%";
           progDown.setAttribute("aria-valuenow", "100");
+          if (downloadProgressLabel) downloadProgressLabel.textContent = "100%";
           finalResult.download = finalDown;
           updateGauge(0);
           await new Promise((r) => setTimeout(r, 500));
@@ -857,6 +861,9 @@
           if (e.name !== "AbortError") {
             console.error(e);
             setGaugePhase("Error");
+            if (activeStage === "download" && downloadProgressLabel) {
+              downloadProgressLabel.textContent = "Incomplete";
+            }
             document.getElementById("grade-desc").textContent = "Could not complete the test: " + explainTestError(e, activeStage, server);
           } else {
             setGaugePhase("Aborted");
@@ -879,6 +886,7 @@
         setGaugePhase("Aborted");
         updateGauge(0);
         progDown.setAttribute("aria-valuenow", "0");
+        if (downloadProgressLabel) downloadProgressLabel.textContent = "Cancelled";
         startBtn.classList.remove("hidden");
         stopBtn.classList.add("hidden");
         shareBtn.classList.add("hidden");
