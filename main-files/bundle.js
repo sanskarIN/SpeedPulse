@@ -156,106 +156,176 @@
       throw new RangeError(`Test payload must be between 1 and ${max} bytes`);
     }
   }
+  function assertTimeout(ms, max) {
+    if (!Number.isSafeInteger(ms) || ms < 1 || ms > max) {
+      throw new RangeError(`Request timeout must be between 1 and ${max} ms`);
+    }
+  }
+  function cancelled() {
+    return new DOMException("Speed test cancelled", "AbortError");
+  }
+  function withDeadline(stage, timeoutMs, work) {
+    const request = new AbortController();
+    activeController = request;
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timedOut = false;
+      let timer;
+      const cleanup = () => {
+        if (timer !== void 0) clearTimeout(timer);
+        request.signal.removeEventListener("abort", onAbort);
+        if (activeController === request) activeController = null;
+      };
+      const finish = (success, value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (success) resolve(value);
+        else reject(value);
+      };
+      const onAbort = () => finish(
+        false,
+        timedOut ? new MeasurementTimeoutError(stage, timeoutMs) : cancelled()
+      );
+      request.signal.addEventListener("abort", onAbort, { once: true });
+      timer = setTimeout(() => {
+        timedOut = true;
+        request.abort();
+      }, timeoutMs);
+      try {
+        work(request.signal).then(
+          (value) => finish(true, value),
+          (error) => finish(false, error)
+        );
+      } catch (error) {
+        finish(false, error);
+      }
+    });
+  }
+  function safeProgress(onProgress, value, signal) {
+    if (signal.aborted) throw cancelled();
+    try {
+      onProgress(value);
+    } catch (error) {
+      console.warn("[SpeedPulse] Ignoring presentation callback error:", error);
+    }
+  }
   function abortTest() {
-    controller?.abort();
-    controller = null;
+    const current = activeController;
+    activeController = null;
+    current?.abort();
   }
   async function runPingTest(selectedServer = "cloudflare", onProgress = () => {
-  }) {
+  }, probeTimeoutMs = LATENCY_TIMEOUT_MS) {
+    assertTimeout(probeTimeoutMs, LATENCY_TIMEOUT_MS);
     const server = resolveServer(selectedServer);
-    const signal = (controller = new AbortController()).signal;
     const target = ENDPOINTS[server].down;
     const iterations = 10;
     const readings = [];
     let failed = 0;
     for (let i = 0; i < iterations; i++) {
-      if (signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
-      const start = performance.now();
       try {
-        const response = await fetch(`${target}?bytes=0&cb=${Date.now()}_${i}`, {
-          method: "GET",
-          signal,
-          cache: "no-store"
+        const elapsed = await withDeadline("ping", probeTimeoutMs, async (signal) => {
+          const start = performance.now();
+          const response = await fetch(`${target}?bytes=0&cb=${Date.now()}_${i}`, {
+            method: "GET",
+            signal,
+            cache: "no-store"
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status} during latency probe`);
+          const duration = performance.now() - start;
+          safeProgress(onProgress, duration, signal);
+          return duration;
         });
-        if (!response.ok) throw new Error(`Latency probe returned HTTP ${response.status}`);
-        const elapsed = performance.now() - start;
         readings.push(elapsed);
-        onProgress(elapsed);
       } catch (error) {
-        if (signal.aborted || error instanceof Error && error.name === "AbortError") throw error;
+        if (error instanceof Error && error.name === "AbortError") throw error;
         failed++;
       }
     }
     if (!readings.length) throw new Error("All latency probes failed");
     const ping = readings.reduce((a, b) => a + b, 0) / readings.length;
-    let sum = 0;
+    let variation = 0;
     for (let i = 1; i < readings.length; i++) {
-      sum += Math.abs(readings[i] - readings[i - 1]);
+      variation += Math.abs(readings[i] - readings[i - 1]);
     }
     return {
       ping,
-      jitter: readings.length > 1 ? sum / (readings.length - 1) : 0,
+      jitter: readings.length > 1 ? variation / (readings.length - 1) : 0,
       packetLoss: failed / iterations * 100
     };
   }
   async function runDownloadTest(selectedServer = "cloudflare", onProgress = () => {
-  }, bytes = 25 * 1024 * 1024) {
+  }, bytes = 25 * 1024 * 1024, timeoutMs = DOWNLOAD_TIMEOUT_MS) {
     assertBytes(bytes, MAX_DOWNLOAD_BYTES);
+    assertTimeout(timeoutMs, DOWNLOAD_TIMEOUT_MS);
     const server = resolveServer(selectedServer);
-    const signal = (controller = new AbortController()).signal;
     const target = ENDPOINTS[server].down;
-    const start = performance.now();
-    let received = 0;
-    const response = await fetch(`${target}?bytes=${bytes}&cb=${Date.now()}`, {
-      signal,
-      cache: "no-store"
+    return withDeadline("download", timeoutMs, async (signal) => {
+      const start = performance.now();
+      let received = 0;
+      const response = await fetch(`${target}?bytes=${bytes}&cb=${Date.now()}`, {
+        signal,
+        cache: "no-store"
+      });
+      if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`);
+      if (!response.body) throw new Error("Streaming download unavailable");
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (signal.aborted) throw cancelled();
+          if (done) break;
+          received += value.byteLength;
+          const seconds2 = (performance.now() - start) / 1e3;
+          if (seconds2 > 0.1) safeProgress(onProgress, received * 8 / 1e6 / seconds2, signal);
+        }
+      } finally {
+        if (signal.aborted) {
+          void reader.cancel().catch(() => {
+          });
+        }
+      }
+      if (!received) throw new Error("Download returned no bytes");
+      const seconds = (performance.now() - start) / 1e3;
+      const measured = seconds > 0 ? received * 8 / 1e6 / seconds : 0;
+      safeProgress(onProgress, measured, signal);
+      return measured;
     });
-    if (!response.ok) throw new Error(`Download returned HTTP ${response.status}`);
-    if (!response.body) throw new Error("Streaming download is unavailable in this browser");
-    const reader = response.body.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      received += value.byteLength;
-      const elapsed = (performance.now() - start) / 1e3;
-      if (elapsed > 0.1) onProgress(received * 8 / 1e6 / elapsed);
-    }
-    if (signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
-    if (!received) throw new Error("Download returned no bytes");
-    const seconds = (performance.now() - start) / 1e3;
-    const measured = seconds > 0 ? received * 8 / 1e6 / seconds : 0;
-    onProgress(measured);
-    return measured;
   }
   async function runUploadTest(selectedServer = "cloudflare", onProgress = () => {
-  }, bytes = 5 * 1024 * 1024) {
+  }, bytes = 5 * 1024 * 1024, timeoutMs = UPLOAD_TIMEOUT_MS) {
     assertBytes(bytes, MAX_UPLOAD_BYTES);
+    assertTimeout(timeoutMs, UPLOAD_TIMEOUT_MS);
     const server = resolveServer(selectedServer);
-    const signal = (controller = new AbortController()).signal;
     const target = ENDPOINTS[server].up;
     const buffer = new Uint8Array(bytes);
     for (let i = 0; i < buffer.length; i++) buffer[i] = Math.random() * 256;
     const body = new Blob([buffer], { type: "text/plain" });
     const uploadUrl = server === "cloudflare" ? `${target}?bytes=${bytes}` : target;
-    const start = performance.now();
-    const response = await fetch(uploadUrl, {
-      method: "POST",
-      body,
-      mode: "cors",
-      signal
+    return withDeadline("upload", timeoutMs, async (signal) => {
+      const start = performance.now();
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        body,
+        mode: "cors",
+        signal
+      });
+      if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
+      const seconds = (performance.now() - start) / 1e3;
+      const measured = seconds > 0 ? bytes * 8 / 1e6 / seconds : 0;
+      safeProgress(onProgress, measured, signal);
+      return measured;
     });
-    if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
-    if (signal.aborted) throw new DOMException("Speed test cancelled", "AbortError");
-    const seconds = (performance.now() - start) / 1e3;
-    const measured = seconds > 0 ? bytes * 8 / 1e6 / seconds : 0;
-    onProgress(measured);
-    return measured;
   }
-  var MAX_DOWNLOAD_BYTES, MAX_UPLOAD_BYTES, ENDPOINTS, controller, isFileProtocol;
+  var MAX_DOWNLOAD_BYTES, MAX_UPLOAD_BYTES, LATENCY_TIMEOUT_MS, DOWNLOAD_TIMEOUT_MS, UPLOAD_TIMEOUT_MS, ENDPOINTS, MeasurementTimeoutError, activeController, isFileProtocol;
   var init_speedtest = __esm({
     "src/speedtest.ts"() {
       MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
       MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+      LATENCY_TIMEOUT_MS = 8e3;
+      DOWNLOAD_TIMEOUT_MS = 9e4;
+      UPLOAD_TIMEOUT_MS = 9e4;
       ENDPOINTS = {
         local: { down: "/api/down", up: "/api/up" },
         cloudflare: {
@@ -263,7 +333,15 @@
           up: "https://speed.cloudflare.com/__up"
         }
       };
-      controller = null;
+      MeasurementTimeoutError = class extends Error {
+        constructor(stage, timeoutMs) {
+          super(`${stage} exceeded its ${timeoutMs} ms deadline`);
+          this.stage = stage;
+          this.timeoutMs = timeoutMs;
+          this.name = "MeasurementTimeoutError";
+        }
+      };
+      activeController = null;
       isFileProtocol = typeof window !== "undefined" && window.location.protocol === "file:";
     }
   });
