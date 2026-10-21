@@ -7,6 +7,8 @@ declare const html2canvas: any;
 
 import { formatSpeed, playSound, calculateGrade, fireConfetti } from './utils.js';
 import { runPingTest, runDownloadTest, runUploadTest, abortTest } from './speedtest.js';
+import { getTestProfile, loadTestProfile, saveTestProfile } from './test-profiles.js';
+import type { SpeedServer } from './speedtest.js';
 import { getHistory, saveResult, clearHistory, exportToCSV } from './history.js';
 
 // Elements
@@ -210,8 +212,11 @@ async function startTest() {
 
     try { playSound('start'); } catch (error) { console.warn('Audio notification skipped:', error); }
 
-    const server = (document.getElementById('server-select') as HTMLSelectElement).value;
-    const finalResult = { isp: document.getElementById('info-isp').textContent };
+    const server = (document.getElementById('server-select') as HTMLSelectElement).value as SpeedServer;
+    // Freeze the budget for this run, even if the user later changes preferences.
+    const profile = getTestProfile((document.getElementById('test-profile-select') as HTMLSelectElement).value);
+    const finalResult: { isp: string | null; profile: string; ping?: number; jitter?: number; download?: number; upload?: number } =
+        { isp: document.getElementById('info-isp').textContent, profile: profile.id };
 
     try {
         // Initialization / Warm-up Phase
@@ -244,7 +249,7 @@ async function startTest() {
             updateGauge(mbps);
             valDown.textContent = formatSpeed(mbps, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
             addChartPoint(mbps, true);
-        });
+        }, profile.downloadBytes);
         valDown.textContent = formatSpeed(finalDown, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
         progDown.style.width = '100%';
         finalResult.download = finalDown;
@@ -265,7 +270,7 @@ async function startTest() {
             updateGauge(mbps);
             valUp.textContent = formatSpeed(mbps, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
             addChartPoint(mbps, false);
-        });
+          }, profile.uploadBytes);
           valUp.textContent = formatSpeed(finalUp, document.getElementById('unit-select').value);
           progUp.style.width = '100%';
           finalResult.upload = finalUp;
@@ -684,13 +689,29 @@ function compareResults() {
         if (history.length > 0) {
             const last = history[0];
             valDown.textContent = formatSpeed(last.download, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
-            valUp.textContent = formatSpeed(last.upload, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
+            valUp.textContent = Number.isFinite(last.upload) ? formatSpeed(last.upload, ((document.getElementById('unit-select') as HTMLSelectElement)).value) : '--';
             updateGauge(last.download);
         }
     }
     document.querySelectorAll('.unit-label').forEach(el => el.textContent = ((document.getElementById('unit-select') as HTMLSelectElement)).value);
 });
 
+
+// Test-profile selector is persisted separately from measured history.
+const profileSelect = document.getElementById('test-profile-select') as HTMLSelectElement;
+const budgetNote = document.getElementById('profile-budget-note');
+function showProfileBudget(): void {
+    const chosen = getTestProfile(profileSelect.value);
+    const totalMiB = (chosen.downloadBytes + chosen.uploadBytes) / (1024 * 1024);
+    if (budgetNote) budgetNote.textContent =
+        chosen.id + ': about ' + totalMiB + ' MiB payload per test (plus network overhead).';
+}
+profileSelect.value = loadTestProfile().id;
+showProfileBudget();
+profileSelect.addEventListener('change', () => {
+    saveTestProfile(profileSelect.value);
+    showProfileBudget();
+});
 
 // Event Listeners
 startBtn.addEventListener('click', startTest);
@@ -762,7 +783,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 3. Chart (Non-critical, often fails if CDN blocked)
     try { initChart();
-    initLatencyChart(); } catch(e) { console.error("Chart Error:", e); }
+    } catch(e) { console.error("Chart Error:", e); }
     
     // 4. Data Fetching (Non-critical)
     try { fetchConnectionDetails(); } catch(e) { console.error("ISP Fetch Error:", e); }
