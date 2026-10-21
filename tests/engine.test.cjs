@@ -247,3 +247,50 @@ test('timeouts reject invalid configuration before any transfer starts', async (
     global.fetch = original;
   }
 });
+
+test('a truncated HTTP download is rejected instead of reported as measured throughput', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  global.fetch = async () => {
+    let step = 0;
+    return { ok: true, body: { getReader: () => ({
+      read: async () => step++ === 0
+        ? { done: false, value: new Uint8Array(100) }
+        : { done: true }
+    }) } };
+  };
+  try {
+    await assert.rejects(engine.runDownloadTest('local', () => {}, 1024), /Incomplete download/);
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('download progress reflects actually received bytes and completes at 100 percent', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  global.fetch = async () => {
+    let step = 0;
+    return { ok: true, body: { getReader: () => ({
+      read: async () => step++ === 0
+        ? { done: false, value: new Uint8Array(1024) }
+        : { done: true }
+    }) } };
+  };
+  const fractions = [];
+  try {
+    const measured = await engine.runDownloadTest('local',
+      (_mbps, completedFraction) => fractions.push(completedFraction), 1024);
+    assert.ok(measured > 0);
+    assert.ok(fractions.includes(1));
+    assert.ok(fractions.every(f => f >= 0 && f <= 1));
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('the dashboard source uses fractional downloaded bytes for its progress bar', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'src', 'script.ts'), 'utf8');
+  assert.match(script, /completedFraction/);
+  assert.match(script, /progDown\.style\.width/);
+});
