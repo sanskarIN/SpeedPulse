@@ -339,6 +339,17 @@
     return typeof input === 'string' && Object.prototype.hasOwnProperty.call(TEST_PROFILES, input)
       ? TEST_PROFILES[input] : TEST_PROFILES.standard;
   }
+  function effectiveTestBudget(profile, limits) {
+    if (!limits) return { downloadBytes: profile.downloadBytes, uploadBytes: profile.uploadBytes };
+    const maxDownload = Number.isSafeInteger(limits.maxDownloadBytes) && limits.maxDownloadBytes >= 1
+      ? limits.maxDownloadBytes : profile.downloadBytes;
+    const maxUpload = Number.isSafeInteger(limits.maxUploadBytes) && limits.maxUploadBytes >= 1
+      ? limits.maxUploadBytes : profile.uploadBytes;
+    return {
+      downloadBytes: Math.min(profile.downloadBytes, maxDownload),
+      uploadBytes: Math.min(profile.uploadBytes, maxUpload)
+    };
+  }
   function loadTestProfile() {
     try { return getTestProfile(localStorage.getItem('speedpulse_test_profile')); }
     catch { return TEST_PROFILES.standard; }
@@ -524,6 +535,7 @@
         try { playSound('start'); } catch (error) { console.warn('Audio notification skipped:', error); }
         const server = document.getElementById("server-select").value;
         const profile = getTestProfile(document.getElementById('test-profile-select').value);
+        const budget = effectiveTestBudget(profile, server === 'local' ? window.speedpulseServerLimits : null);
         const finalResult = { isp: document.getElementById("info-isp").textContent, profile: profile.id };
         try {
           setGaugePhase("Finding Optimal Server...");
@@ -550,7 +562,7 @@
             updateGauge(mbps);
             valDown.textContent = formatSpeed(mbps, document.getElementById("unit-select").value);
             addChartPoint(mbps, true);
-          }, profile.downloadBytes);
+          }, budget.downloadBytes);
           valDown.textContent = formatSpeed(finalDown, document.getElementById("unit-select").value);
           progDown.style.width = "100%";
           finalResult.download = finalDown;
@@ -567,7 +579,7 @@
             updateGauge(mbps);
             valUp.textContent = formatSpeed(mbps, document.getElementById("unit-select").value);
             addChartPoint(mbps, false);
-          }, profile.uploadBytes);
+          }, budget.uploadBytes);
             valUp.textContent = formatSpeed(finalUp, document.getElementById('unit-select').value);
             progUp.style.width = '100%';
             finalResult.upload = finalUp;
