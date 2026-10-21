@@ -147,6 +147,155 @@
     }
   });
 
+  // src/dashboard-chart.ts
+  function textColor() {
+    const theme = document.documentElement.getAttribute("data-theme");
+    if (theme === "dark") return "#94a3b8";
+    if (theme !== "custom") return "#475569";
+    try {
+      const raw = localStorage.getItem("custom_theme_config") || '{"base":"dark"}';
+      const config = JSON.parse(raw);
+      if (config && typeof config === "object" && "base" in config) {
+        return config.base === "light" ? "#475569" : "#94a3b8";
+      }
+    } catch {
+    }
+    return "#94a3b8";
+  }
+  function initChart() {
+    if (chart) return;
+    try {
+      const element = document.getElementById("speedChart");
+      if (!element || typeof Chart === "undefined") return;
+      const context = element.getContext("2d");
+      if (!context) return;
+      Chart.defaults.color = textColor();
+      chart = new Chart(context, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Download",
+              data: download,
+              borderColor: "#06b6d4",
+              backgroundColor: "rgba(6, 182, 212, 0.1)",
+              borderWidth: 2,
+              tension: 0.4,
+              fill: true,
+              pointRadius: 0
+            },
+            {
+              label: "Upload",
+              data: upload,
+              borderColor: "#8b5cf6",
+              backgroundColor: "rgba(139, 92, 246, 0.1)",
+              borderWidth: 2,
+              tension: 0.4,
+              fill: true,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 0 },
+          scales: {
+            x: { display: false },
+            y: { beginAtZero: true, grid: { color: "rgba(150, 150, 150, 0.1)" } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    } catch (error) {
+      chart = null;
+      console.warn("[SpeedPulse] Optional bandwidth chart unavailable:", error);
+    }
+  }
+  function updateChartTheme() {
+    if (!chart || typeof Chart === "undefined") return;
+    try {
+      const color = textColor();
+      Chart.defaults.color = color;
+      if (chart.options.scales?.x?.ticks) chart.options.scales.x.ticks.color = color;
+      if (chart.options.scales?.y?.ticks) chart.options.scales.y.ticks.color = color;
+      chart.update();
+    } catch (error) {
+      console.warn("[SpeedPulse] Chart theme update skipped:", error);
+    }
+  }
+  function addChartPoint(value, isDownload) {
+    if (!Number.isFinite(value) || value < 0) return;
+    labels.push((/* @__PURE__ */ new Date()).toLocaleTimeString());
+    download.push(isDownload ? value : null);
+    upload.push(isDownload ? null : value);
+    if (labels.length > MAX_SAMPLES) {
+      labels.shift();
+      download.shift();
+      upload.shift();
+    }
+    try {
+      chart?.update();
+    } catch (error) {
+      console.warn("[SpeedPulse] Optional chart update skipped:", error);
+    }
+  }
+  function clearChart() {
+    labels.length = 0;
+    download.length = 0;
+    upload.length = 0;
+    try {
+      chart?.update();
+    } catch (error) {
+      console.warn("[SpeedPulse] Optional chart clearing skipped:", error);
+    }
+  }
+  var MAX_SAMPLES, labels, download, upload, chart;
+  var init_dashboard_chart = __esm({
+    "src/dashboard-chart.ts"() {
+      MAX_SAMPLES = 50;
+      labels = [];
+      download = [];
+      upload = [];
+      chart = null;
+    }
+  });
+
+  // src/readiness.ts
+  function valid(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
+  }
+  function check(values, passes) {
+    return values.every(valid) ? passes() ? "pass" : "fail" : "unknown";
+  }
+  function calculateReadiness(metrics) {
+    const { download: download2, upload: upload2, ping, jitter } = metrics;
+    return {
+      streaming4K: check([download2], () => download2 > 25),
+      videoCalls: check(
+        [download2, upload2, ping],
+        () => download2 > 10 && upload2 > 3 && ping < 100
+      ),
+      gaming: check(
+        [download2, ping, jitter],
+        () => download2 > 25 && ping < 50 && jitter < 10
+      ),
+      largeUploads: check([upload2], () => upload2 > 20)
+    };
+  }
+  var READINESS_ORDER;
+  var init_readiness = __esm({
+    "src/readiness.ts"() {
+      READINESS_ORDER = [
+        "streaming4K",
+        "videoCalls",
+        "gaming",
+        "largeUploads"
+      ];
+    }
+  });
+
   // src/speedtest.ts
   function resolveServer(server) {
     return server === "local" && isFileProtocol ? "cloudflare" : server;
@@ -523,6 +672,8 @@
   var require_script = __commonJS({
     "src/script.ts"() {
       init_utils();
+      init_dashboard_chart();
+      init_readiness();
       init_speedtest();
       init_test_profiles();
       init_history();
@@ -543,116 +694,6 @@
       var isTesting = false;
       var testGeneration = 0;
       var currentPhase = "idle";
-      var speedChart = null;
-      var chartDataDown = [];
-      var chartDataUp = [];
-      var chartLabels = [];
-      function initChart() {
-        try {
-          const chartEl = document.getElementById("speedChart");
-          if (!chartEl || typeof Chart === "undefined") {
-            console.warn("SpeedPulse: Chart.js not loaded or canvas missing. Skipping chart.");
-            return;
-          }
-          const ctx = chartEl.getContext("2d");
-          const theme = document.documentElement.getAttribute("data-theme");
-          let color = "#475569";
-          if (theme === "dark") color = "#94a3b8";
-          else if (theme === "custom") {
-            const config = JSON.parse(localStorage.getItem("custom_theme_config") || '{"base":"dark"}');
-            color = config.base === "dark" ? "#94a3b8" : "#475569";
-          }
-          Chart.defaults.color = color;
-          speedChart = new Chart(ctx, {
-            type: "line",
-            data: {
-              labels: chartLabels,
-              datasets: [
-                {
-                  label: "Download",
-                  data: chartDataDown,
-                  borderColor: "#06b6d4",
-                  backgroundColor: "rgba(6, 182, 212, 0.1)",
-                  borderWidth: 2,
-                  tension: 0.4,
-                  fill: true,
-                  pointRadius: 0
-                },
-                {
-                  label: "Upload",
-                  data: chartDataUp,
-                  borderColor: "#8b5cf6",
-                  backgroundColor: "rgba(139, 92, 246, 0.1)",
-                  borderWidth: 2,
-                  tension: 0.4,
-                  fill: true,
-                  pointRadius: 0
-                }
-              ]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              animation: { duration: 0 },
-              // fast updates
-              scales: {
-                x: { display: false },
-                y: {
-                  beginAtZero: true,
-                  grid: { color: "rgba(150, 150, 150, 0.1)" }
-                }
-              },
-              plugins: { legend: { display: false } }
-            }
-          });
-        } catch (e) {
-          console.error("Chart initialization failed", e);
-        }
-      }
-      function updateChartTheme() {
-        if (speedChart) {
-          const theme = document.documentElement.getAttribute("data-theme");
-          let color = "#475569";
-          if (theme === "dark") {
-            color = "#94a3b8";
-          } else if (theme === "custom") {
-            try {
-              const config = JSON.parse(localStorage.getItem("custom_theme_config") || '{"base":"dark"}');
-              color = config.base === "dark" ? "#94a3b8" : "#475569";
-            } catch (e) {
-              color = "#94a3b8";
-            }
-          }
-          Chart.defaults.color = color;
-          if (speedChart.options.scales.x) speedChart.options.scales.x.ticks.color = color;
-          if (speedChart.options.scales.y) speedChart.options.scales.y.ticks.color = color;
-          speedChart.update();
-        }
-      }
-      function addChartPoint(val, isDown) {
-        if (!speedChart) return;
-        const now = (/* @__PURE__ */ new Date()).toLocaleTimeString();
-        chartLabels.push(now);
-        if (isDown) {
-          chartDataDown.push(val);
-          chartDataUp.push(null);
-        } else {
-          chartDataDown.push(null);
-          chartDataUp.push(val);
-        }
-        if (chartLabels.length > 50) {
-          chartLabels.shift();
-          chartDataDown.shift();
-          chartDataUp.shift();
-        }
-        speedChart.update();
-      }
-      function clearChart() {
-        chartLabels.length = 0;
-        chartDataDown.length = 0;
-        chartDataUp.length = 0;
-        if (speedChart) speedChart.update();
-      }
       function setGaugePhase(phase) {
         gaugePhase.textContent = phase;
         currentPhase = phase;
@@ -775,15 +816,15 @@
           } : calculateGrade(finalDown, finalUp, ping);
           document.getElementById("overall-grade").textContent = gradeObj.grade;
           document.getElementById("grade-desc").textContent = gradeObj.text;
-          const inds = document.querySelectorAll(".status-indicator");
-          inds[0].className = "status-indicator " + (finalDown > 25 ? "status-pass" : "status-fail");
-          inds[1].className = "status-indicator " + (finalDown > 10 && finalUp != null && finalUp > 3 && ping < 100 ? "status-pass" : "status-fail");
-          inds[2].className = "status-indicator " + (finalDown > 25 && ping < 50 && jitter < 10 ? "status-pass" : "status-fail");
-          inds[3].className = "status-indicator " + (finalUp != null && finalUp > 20 ? "status-pass" : "status-fail");
-          if (uploadError) {
-            if (inds[1]) inds[1].className = "status-indicator";
-            if (inds[3]) inds[3].className = "status-indicator";
-          }
+          const indicators = document.querySelectorAll(".status-indicator");
+          const readiness = calculateReadiness({ download: finalDown, upload: finalUp, ping, jitter });
+          READINESS_ORDER.forEach((key, index) => {
+            const indicator = indicators[index];
+            if (!indicator) return;
+            const status = readiness[key];
+            indicator.className = "status-indicator" + (status === "unknown" ? "" : " status-" + status);
+            indicator.setAttribute("aria-label", status === "unknown" ? "Not enough measured data" : status === "pass" ? "Likely suitable" : "May be unsuitable");
+          });
           saveResult(finalResult);
           renderHistory();
           try {
@@ -887,11 +928,11 @@
         history.forEach((item, index) => {
           const tr = document.createElement("tr");
           const tdCheck = document.createElement("td");
-          const check = document.createElement("input");
-          check.type = "checkbox";
-          check.className = "history-checkbox";
-          check.value = index;
-          tdCheck.appendChild(check);
+          const check2 = document.createElement("input");
+          check2.type = "checkbox";
+          check2.className = "history-checkbox";
+          check2.value = index;
+          tdCheck.appendChild(check2);
           const tdDate = document.createElement("td");
           tdDate.textContent = new Date(item.date).toLocaleDateString() + " " + new Date(item.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           const tdDown = document.createElement("td");
