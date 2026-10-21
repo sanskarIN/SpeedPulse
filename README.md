@@ -113,6 +113,26 @@ The [complete URL and external-service inventory](./docs/links.md) identifies ea
 - [Contact](https://sanskarin.github.io/contact) · [X](https://x.com/SanskarCodes) · [LinkedIn](https://linkedin.com/in/SanskarCodes)
 - Support development: [Buy Me a Coffee](https://buymeacoffee.com/SanskarCodes) · [Razorpay](https://razorpay.me/@SanskarCodes) · [PayPal.Me](https://paypal.me/SanskarCodes)
 
+## Current development on main (after v1.0.0)
+
+The next development cycle adds **TypeScript-defined speed-test data budgets**, a
+self-hosted ASP.NET Core configuration system, and safer local history handling.
+These changes are **not included in the published v1.0.0 tag**.
+
+- Choose **Quick** (5 MiB down / 1 MiB up), **Standard** (25 / 5), or
+  **Thorough** (50 / 8) from the main dashboard. Actual data use includes
+  overhead and latency requests. Your selection is saved locally.
+- ASP.NET Core enforces configurable download, upload, and per-IP rate limits
+  from `appsettings.json` or `SpeedPulse__*` environment variables, and
+  exposes effective profile caps through `GET /api/config`.
+- The typed browser engine uses decimal Mbps; malformed history data is
+  filtered and exported CSV values are escaped safely.
+- `npm run typecheck:engine` checks the growing strongly typed TypeScript
+  modules, and CI keeps deployable bundles synchronized with the source.
+
+Read the [post-v1.0.0 development guide](./docs/post-v1.0.0-development.md)
+for configuration, transfer budgets, test coverage, and release boundaries.
+
 ## Stable release — v1.0.0
 
 **[Download SpeedPulse v1.0.0](https://github.com/sanskarIN/SpeedPulse/releases/tag/v1.0.0)** (October 17, 2026). The first stable release includes the corrected upload test, a fixed bandwidth chart, Developer Labs, and a self-hosted ASP.NET Core 10 backend. Download archives are available for Windows x64, Linux x64, Apple Silicon macOS, and static web hosting.
