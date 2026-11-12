@@ -111,7 +111,7 @@ The [complete URL and external-service inventory](./docs/links.md) identifies ea
 - [Repository](https://github.com/sanskarIN/SpeedPulse) · [Issues](https://github.com/sanskarIN/SpeedPulse/issues)
 - [Creator's GitHub](https://github.com/sanskarIN) · [Website](https://sanskarin.github.io)
 - [Contact](https://sanskarin.github.io/contact) · [X](https://x.com/SanskarCodes) · [LinkedIn](https://linkedin.com/in/SanskarCodes)
-- Support development: [Buy Me a Coffee](https://buymeacoffee.com/SanskarCodes) · [Razorpay](https://razorpay.me/@SanskarCodes) · [PayPal.Me](https://paypal.me/SanskarCodes)
+- Support development: [GitHub Sponsors](https://github.com/sponsors/sanskarIN) · [Buy Me a Coffee](https://buymeacoffee.com/SanskarCodes) · [Razorpay](https://razorpay.me/@SanskarCodes) · [PayPal.Me](https://paypal.me/SanskarCodes)
 
 ## Current development on main (after v1.0.0)
 
