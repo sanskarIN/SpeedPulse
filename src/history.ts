@@ -102,11 +102,13 @@ export function saveResult(result: SpeedTestResult): SpeedTestEntry[] {
  * This avoids treating self-hosted/LAN speeds as Internet personal bests.
  */
 export function areResultsComparable(a: SpeedTestResult, b: SpeedTestResult): boolean {
-    return !!a.server && a.server === b.server &&
-        !!a.profile && a.profile === b.profile &&
-        typeof a.downloadBytes === 'number' && a.downloadBytes > 0 &&
+    return (a.server === 'cloudflare' || a.server === 'local') &&
+        a.server === b.server &&
+        ['quick', 'standard', 'thorough'].includes(a.profile ?? '') &&
+        a.profile === b.profile &&
+        cleanTransferBytes(a.downloadBytes, 64 * 1024 * 1024) !== undefined &&
         a.downloadBytes === b.downloadBytes &&
-        typeof a.uploadBytes === 'number' && a.uploadBytes > 0 &&
+        cleanTransferBytes(a.uploadBytes, 8 * 1024 * 1024) !== undefined &&
         a.uploadBytes === b.uploadBytes;
 }
 

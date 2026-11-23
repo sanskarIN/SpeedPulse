@@ -633,7 +633,7 @@
     return history;
   }
   function areResultsComparable(a, b) {
-    return !!a.server && a.server === b.server && !!a.profile && a.profile === b.profile && typeof a.downloadBytes === "number" && a.downloadBytes > 0 && a.downloadBytes === b.downloadBytes && typeof a.uploadBytes === "number" && a.uploadBytes > 0 && a.uploadBytes === b.uploadBytes;
+    return (a.server === "cloudflare" || a.server === "local") && a.server === b.server && ["quick", "standard", "thorough"].includes(a.profile ?? "") && a.profile === b.profile && cleanTransferBytes(a.downloadBytes, 64 * 1024 * 1024) !== void 0 && a.downloadBytes === b.downloadBytes && cleanTransferBytes(a.uploadBytes, 8 * 1024 * 1024) !== void 0 && a.uploadBytes === b.uploadBytes;
   }
   function previousComparableBest(entries, candidate) {
     const prior = entries.filter((entry) => areResultsComparable(entry, candidate) && typeof entry.download === "number" && Number.isFinite(entry.download));
@@ -1152,6 +1152,9 @@
           shareBtn.textContent = "Share Result";
         }
       }
+      function displayComparisonMetric(value, digits, unit) {
+        return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) + " " + unit : "Unavailable";
+      }
       function compareResults() {
         const checked = Array.from(document.querySelectorAll(".history-checkbox:checked"));
         if (checked.length !== 2) {
@@ -1170,17 +1173,17 @@
             <h3>Result 1</h3>
             <p><strong>Endpoint:</strong> ${endpointLabel(res1.server)}</p>
             <p><strong>Date:</strong> ${new Date(res1.date).toLocaleDateString()}</p>
-            <p><strong>Download:</strong> ${res1.download?.toFixed(2)} Mbps</p>
-            <p><strong>Upload:</strong> ${res1.upload?.toFixed(2)} Mbps</p>
-            <p><strong>Ping:</strong> ${Math.round(res1.ping)} ms</p>
+            <p><strong>Download:</strong> ${displayComparisonMetric(res1.download, 2, "Mbps")}</p>
+            <p><strong>Upload:</strong> ${displayComparisonMetric(res1.upload, 2, "Mbps")}</p>
+            <p><strong>Ping:</strong> ${displayComparisonMetric(res1.ping, 0, "ms")}</p>
         </div>
         <div class="glass-panel" style="background:var(--hover-bg)">
             <h3>Result 2</h3>
             <p><strong>Endpoint:</strong> ${endpointLabel(res2.server)}</p>
             <p><strong>Date:</strong> ${new Date(res2.date).toLocaleDateString()}</p>
-            <p><strong>Download:</strong> ${res2.download?.toFixed(2)} Mbps</p>
-            <p><strong>Upload:</strong> ${res2.upload?.toFixed(2)} Mbps</p>
-            <p><strong>Ping:</strong> ${Math.round(res2.ping)} ms</p>
+            <p><strong>Download:</strong> ${displayComparisonMetric(res2.download, 2, "Mbps")}</p>
+            <p><strong>Upload:</strong> ${displayComparisonMetric(res2.upload, 2, "Mbps")}</p>
+            <p><strong>Ping:</strong> ${displayComparisonMetric(res2.ping, 0, "ms")}</p>
         </div>
     `;
         modal.classList.remove("hidden");
@@ -1190,9 +1193,15 @@
           const history = getHistory();
           if (history.length > 0) {
             const last = history[0];
-            valDown.textContent = formatSpeed(last.download, document.getElementById("unit-select").value);
-            valUp.textContent = Number.isFinite(last.upload) ? formatSpeed(last.upload, document.getElementById("unit-select").value) : "--";
-            updateGauge(last.download);
+            const unit = document.getElementById("unit-select").value;
+            if (typeof last.download === "number" && Number.isFinite(last.download)) {
+              valDown.textContent = formatSpeed(last.download, unit);
+              updateGauge(last.download);
+            } else {
+              valDown.textContent = "--";
+              updateGauge(0);
+            }
+            valUp.textContent = typeof last.upload === "number" && Number.isFinite(last.upload) ? formatSpeed(last.upload, unit) : "--";
           }
         }
         document.querySelectorAll(".unit-label").forEach((el) => el.textContent = document.getElementById("unit-select").value);

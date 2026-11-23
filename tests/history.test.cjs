@@ -141,3 +141,16 @@ test('CSV shows source attribution and byte budgets without guessing legacy valu
   assert.ok(csv.includes('"Server","Download bytes","Upload bytes"'));
   assert.ok(csv.includes('"Local ASP.NET","5242880","1048576"'));
 });
+
+test('invalid comparison contexts are rejected even when passed directly', () => {
+  const { api } = initHistory();
+  const base = { server: 'cloudflare', profile: 'standard',
+    downloadBytes: 26214400, uploadBytes: 5242880, download: 50 };
+  assert.equal(api.areResultsComparable(base, base), true);
+  assert.equal(api.areResultsComparable({ ...base, server: 'unknown' },
+    { ...base, server: 'unknown' }), false);
+  assert.equal(api.areResultsComparable({ ...base, profile: 'invented' },
+    { ...base, profile: 'invented' }), false);
+  assert.equal(api.areResultsComparable({ ...base, downloadBytes: Infinity },
+    { ...base, downloadBytes: Infinity }), false);
+});

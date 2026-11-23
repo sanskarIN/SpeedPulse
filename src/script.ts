@@ -559,6 +559,11 @@ async function shareResult() {
 }
 
 // Compare Handling
+function displayComparisonMetric(value: number | undefined, digits: number, unit: string): string {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? value.toFixed(digits) + ' ' + unit : 'Unavailable';
+}
+
 function compareResults() {
     const checked = Array.from(document.querySelectorAll('.history-checkbox:checked'));
     if (checked.length !== 2) {
@@ -582,17 +587,17 @@ function compareResults() {
             <h3>Result 1</h3>
             <p><strong>Endpoint:</strong> ${endpointLabel(res1.server)}</p>
             <p><strong>Date:</strong> ${new Date(res1.date).toLocaleDateString()}</p>
-            <p><strong>Download:</strong> ${res1.download?.toFixed(2)} Mbps</p>
-            <p><strong>Upload:</strong> ${res1.upload?.toFixed(2)} Mbps</p>
-            <p><strong>Ping:</strong> ${Math.round(res1.ping)} ms</p>
+            <p><strong>Download:</strong> ${displayComparisonMetric(res1.download, 2, 'Mbps')}</p>
+            <p><strong>Upload:</strong> ${displayComparisonMetric(res1.upload, 2, 'Mbps')}</p>
+            <p><strong>Ping:</strong> ${displayComparisonMetric(res1.ping, 0, 'ms')}</p>
         </div>
         <div class="glass-panel" style="background:var(--hover-bg)">
             <h3>Result 2</h3>
             <p><strong>Endpoint:</strong> ${endpointLabel(res2.server)}</p>
             <p><strong>Date:</strong> ${new Date(res2.date).toLocaleDateString()}</p>
-            <p><strong>Download:</strong> ${res2.download?.toFixed(2)} Mbps</p>
-            <p><strong>Upload:</strong> ${res2.upload?.toFixed(2)} Mbps</p>
-            <p><strong>Ping:</strong> ${Math.round(res2.ping)} ms</p>
+            <p><strong>Download:</strong> ${displayComparisonMetric(res2.download, 2, 'Mbps')}</p>
+            <p><strong>Upload:</strong> ${displayComparisonMetric(res2.upload, 2, 'Mbps')}</p>
+            <p><strong>Ping:</strong> ${displayComparisonMetric(res2.ping, 0, 'ms')}</p>
         </div>
     `;
 
@@ -606,9 +611,16 @@ function compareResults() {
         const history = getHistory();
         if (history.length > 0) {
             const last = history[0];
-            valDown.textContent = formatSpeed(last.download, ((document.getElementById('unit-select') as HTMLSelectElement)).value);
-            valUp.textContent = Number.isFinite(last.upload) ? formatSpeed(last.upload, ((document.getElementById('unit-select') as HTMLSelectElement)).value) : '--';
-            updateGauge(last.download);
+            const unit = ((document.getElementById('unit-select') as HTMLSelectElement)).value;
+            if (typeof last.download === 'number' && Number.isFinite(last.download)) {
+                valDown.textContent = formatSpeed(last.download, unit);
+                updateGauge(last.download);
+            } else {
+                valDown.textContent = '--';
+                updateGauge(0);
+            }
+            valUp.textContent = typeof last.upload === 'number' && Number.isFinite(last.upload)
+                ? formatSpeed(last.upload, unit) : '--';
         }
     }
     document.querySelectorAll('.unit-label').forEach(el => el.textContent = ((document.getElementById('unit-select') as HTMLSelectElement)).value);

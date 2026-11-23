@@ -53,3 +53,12 @@ test('history UI and compiled dashboard identify measurement endpoints', () => {
   assert.match(js, /LAN\/loopback path/);
   assert.match(js, /Not directly comparable: endpoint or data budget differs/);
 });
+
+test('partial history comparisons display unavailable values, not NaN or undefined', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src/script.ts'), 'utf8');
+  assert.match(source, /function displayComparisonMetric/);
+  assert.match(source, /'Unavailable'/);
+  assert.doesNotMatch(source, /res1\.upload\?\.toFixed/);
+  assert.doesNotMatch(source, /Math\.round\(res2\.ping\)/);
+  assert.match(read('bundle.js'), /function displayComparisonMetric/);
+});
