@@ -118,6 +118,35 @@ const mockNetwork = `(() => {
   const originalFetch = window.fetch.bind(window);
   window.fetch = (input, options = {}) => {
     const value = String(input);
+    // Exercise both actual browser routing modes without accessing the network.
+    if (value === '/api/health') return Promise.resolve({
+      ok: true, json: async () => ({ status: 'ok', service: 'SpeedPulseBackend' }),
+    });
+    if (value === '/api/config') return Promise.resolve({
+      ok: true, json: async () => ({
+        maxDownloadBytes: 67108864, maxUploadBytes: 8388608,
+      }),
+    });
+    if (value.startsWith('/api/down')) {
+      smoke.requests.push(value);
+      const bytes = Number(new URL(value, location.href).searchParams.get('bytes') || 0);
+      return Promise.resolve({
+        ok: true, status: 200,
+        body: new ReadableStream({
+          start(controller) {
+            if (bytes > 0) controller.enqueue(new Uint8Array(bytes));
+            controller.close();
+          }
+        })
+      });
+    }
+    if (value === '/api/up') {
+      smoke.requests.push(value);
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: async () => ({ bytesReceived: options.body.size }),
+      });
+    }
     if (!value.startsWith('https://speed.cloudflare.com/')) return originalFetch(input, options);
     smoke.requests.push(value);
     if (smoke.mode === 'stall') {
@@ -211,7 +240,55 @@ async function main() {
     assert.ok(success.requests.some(url => url.includes('/__down?bytes=5242880')));
     assert.ok(success.requests.some(url => url.includes('/__up?bytes=1048576')));
 
-    // Start a second run with intentionally stalled HTTP probes, then Stop.
+    // Local measurements are not Internet-speed grades. Confirm the saved
+    // endpoint label and that mixed-source comparisons warn rather than rank.
+    await until(() => evaluate(
+      '!document.querySelector(\'#server-select option[value="local"]\')?.disabled'),
+      8_000, 'local backend mock discovery');
+    await evaluate(`(() => {
+      document.getElementById('server-select').value = 'local';
+      document.getElementById('start-btn').click();
+    })()`);
+    await until(() => evaluate('document.getElementById("gauge-phase")?.textContent === "Finished"'),
+      25_000, 'mock local test completion');
+    const localResult = await evaluate(`(() => {
+      const saved = JSON.parse(localStorage.getItem('speedpulse_history') || '[]');
+      const statuses = Array.from(document.querySelectorAll('.status-indicator'))
+        .map(node => node.className);
+      return {
+        grade: document.getElementById('overall-grade')?.textContent,
+        message: document.getElementById('grade-desc')?.textContent,
+        endpoint: document.querySelector('#history-body tr td:last-child')?.textContent,
+        saved,
+        statuses,
+        requests: window.__speedpulseSmoke.requests,
+      };
+    })()`);
+    assert.equal(localResult.grade, '-');
+    assert.match(localResult.message, /LAN\/loopback path/);
+    assert.equal(localResult.endpoint, 'Local ASP.NET');
+    assert.equal(localResult.saved[0].server, 'local');
+    assert.equal(localResult.saved[0].downloadBytes, 5242880);
+    assert.equal(localResult.saved[0].uploadBytes, 1048576);
+    assert.equal(localResult.saved[1].server, 'cloudflare');
+    assert.ok(localResult.statuses.every(name => !/status-pass|status-fail/.test(name)));
+    assert.ok(localResult.requests.some(url => url.startsWith('/api/down')));
+    assert.ok(localResult.requests.some(url => url === '/api/up'));
+
+    const mixed = await evaluate(`(() => {
+      const boxes = document.querySelectorAll('.history-checkbox');
+      boxes[0].checked = true;
+      boxes[1].checked = true;
+      document.getElementById('compare-btn').click();
+      return document.getElementById('compare-grid')?.textContent;
+    })()`);
+    assert.match(mixed, /Not directly comparable/);
+    await evaluate(`(() => {
+      document.getElementById('close-modal-btn').click();
+      document.getElementById('server-select').value = 'cloudflare';
+    })()`);
+
+    // Start another run with intentionally stalled HTTP probes, then Stop.
     await evaluate(`(() => {
       window.__speedpulseSmoke.mode = 'stall';
       document.getElementById('start-btn').click();
