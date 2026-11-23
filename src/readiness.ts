@@ -11,6 +11,8 @@ export interface ReadinessMetrics {
     readonly upload?: number | null;
     readonly ping?: number | null;
     readonly jitter?: number | null;
+    /** Local/LAN measurements cannot establish public Internet suitability. */
+    readonly server?: 'cloudflare' | 'local';
 }
 export type ReadinessReport = Readonly<Record<ReadinessCategory, ReadinessState>>;
 
@@ -23,6 +25,10 @@ function check(values: Array<number | null | undefined>, passes: () => boolean):
 }
 
 export function calculateReadiness(metrics: ReadinessMetrics): ReadinessReport {
+    if (metrics.server === 'local') {
+        return { streaming4K: 'unknown', videoCalls: 'unknown',
+            gaming: 'unknown', largeUploads: 'unknown' };
+    }
     const { download, upload, ping, jitter } = metrics;
     return {
         streaming4K: check([download], () => download! > 25),

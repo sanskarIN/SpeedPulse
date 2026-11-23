@@ -2,9 +2,14 @@
  * Local-only speed-test history. Stored entries are considered untrusted:
  * browser extensions, older app versions, and users can all modify storage.
  */
+export type MeasurementServer = 'cloudflare' | 'local';
+
 export interface SpeedTestResult {
     isp?: string | null;
     profile?: string;
+    server?: MeasurementServer;
+    downloadBytes?: number;
+    uploadBytes?: number;
     download?: number;
     upload?: number;
     ping?: number;
@@ -25,6 +30,17 @@ function cleanNumber(value: unknown): number | undefined {
         ? value : undefined;
 }
 
+function cleanTransferBytes(value: unknown, maximum: number): number | undefined {
+    return typeof value === 'number' && Number.isSafeInteger(value) &&
+        value > 0 && value <= maximum ? value : undefined;
+}
+
+export function endpointLabel(server: MeasurementServer | undefined): string {
+    if (server === 'cloudflare') return 'Cloudflare CDN';
+    if (server === 'local') return 'Local ASP.NET';
+    return 'Unknown (legacy)';
+}
+
 function cleanEntry(input: unknown): SpeedTestEntry | null {
     if (!input || typeof input !== 'object') return null;
     const item = input as Record<string, unknown>;
@@ -38,6 +54,10 @@ function cleanEntry(input: unknown): SpeedTestEntry | null {
         isp: typeof item.isp === 'string' ? item.isp.slice(0, 200) : 'Unknown',
         profile: ['quick', 'standard', 'thorough'].includes(String(item.profile))
             ? String(item.profile) : undefined,
+        server: item.server === 'cloudflare' || item.server === 'local'
+            ? item.server : undefined,
+        downloadBytes: cleanTransferBytes(item.downloadBytes, 64 * 1024 * 1024),
+        uploadBytes: cleanTransferBytes(item.uploadBytes, 8 * 1024 * 1024),
         download: cleanNumber(item.download),
         upload: cleanNumber(item.upload),
         ping: cleanNumber(item.ping),
@@ -76,6 +96,30 @@ export function saveResult(result: SpeedTestResult): SpeedTestEntry[] {
     return history;
 }
 
+/**
+ * Historical speeds can only be fairly compared within a known test context.
+ * Old records with no recorded endpoint/budget are preserved but unranked.
+ * This avoids treating self-hosted/LAN speeds as Internet personal bests.
+ */
+export function areResultsComparable(a: SpeedTestResult, b: SpeedTestResult): boolean {
+    return (a.server === 'cloudflare' || a.server === 'local') &&
+        a.server === b.server &&
+        ['quick', 'standard', 'thorough'].includes(a.profile ?? '') &&
+        a.profile === b.profile &&
+        cleanTransferBytes(a.downloadBytes, 64 * 1024 * 1024) !== undefined &&
+        a.downloadBytes === b.downloadBytes &&
+        cleanTransferBytes(a.uploadBytes, 8 * 1024 * 1024) !== undefined &&
+        a.uploadBytes === b.uploadBytes;
+}
+
+export function previousComparableBest(entries: readonly SpeedTestEntry[],
+    candidate: SpeedTestResult): number | null {
+    const prior = entries.filter(entry =>
+        areResultsComparable(entry, candidate) &&
+        typeof entry.download === 'number' && Number.isFinite(entry.download));
+    return prior.length ? Math.max(...prior.map(entry => entry.download!)) : null;
+}
+
 export function clearHistory(): SpeedTestEntry[] {
     try { localStorage.removeItem(STORAGE_KEY); } catch {}
     return [];
@@ -92,7 +136,8 @@ export function exportToCSV(): void {
     const history = getHistory();
     if (!history.length) return;
     const header = ['Date', 'Download (Mbps)', 'Upload (Mbps)', 'Ping (ms)',
-        'Jitter (ms)', 'ISP', 'Profile', 'Status'];
+        'Jitter (ms)', 'ISP', 'Profile', 'Server', 'Download bytes',
+        'Upload bytes', 'Status'];
     const rows = history.map(item => [
         item.date,
         item.download?.toFixed(2) ?? '',
@@ -101,6 +146,9 @@ export function exportToCSV(): void {
         item.jitter?.toFixed(0) ?? '',
         item.isp ?? 'Unknown',
         item.profile ?? 'legacy',
+        endpointLabel(item.server),
+        item.downloadBytes ?? '',
+        item.uploadBytes ?? '',
         item.upload == null ? 'Partial' : 'Complete',
     ]);
     const csvContent = [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
