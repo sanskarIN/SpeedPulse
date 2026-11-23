@@ -9,4 +9,5 @@ public sealed class SpeedPulseOptions
     public int MaxDownloadBytes { get; set; } = 64 * 1024 * 1024;
     public int MaxUploadBytes { get; set; } = 8 * 1024 * 1024;
     public int RateLimitRequestsPerMinute { get; set; } = 60;
+    public int MaxConcurrentTransfers { get; set; } = 4;
 }

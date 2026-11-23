@@ -87,7 +87,9 @@ The build writes browser bundles to `main-files/`. Run `dotnet build -c Release`
 | GET or HEAD | `/api/down?bytes=26214400` | Uncached download or bodyless ping probe; 0–64 MiB allowed, 25 MiB default |
 | POST | `/api/up` | Measures received upload bytes; request body capped at 8 MiB |
 
-Measurement endpoints have per-IP fixed-window rate limiting (60 requests/minute per running server instance) and report invalid download sizes with HTTP 400, oversized uploads with HTTP 413, and excess requests with HTTP 429.
+Measurement endpoints have per-IP fixed-window rate limiting (60 requests/minute by default) and a **global concurrency cap** (4 active upload/download bodies by default, configurable from 1 to 16). Requests above either limit return HTTP 429; saturation includes a `Retry-After: 2` header. Invalid download sizes return HTTP 400, and oversized uploads return HTTP 413. HEAD and zero-byte latency probes do not occupy concurrency slots but still count toward the per-IP request limit.
+
+To reduce simultaneous transfers in a trusted LAN deployment, set `SpeedPulse__MaxConcurrentTransfers=2` before starting the .NET server. `GET /api/config` reports the effective cap and `GET /api/health` reports the current `activeTransfers`. See [the API reference](./docs/api/endpoints.md) for details.
 
 **Hosting security:** The backend is designed primarily for local or trusted-LAN use. CORS is not opened to arbitrary websites, but rate limiting is not a substitute for authentication, access controls, bandwidth quotas or network-level protections when hosting publicly. A local test from the same machine measures loopback throughput, **not** your ISP download speed.
 

@@ -20,6 +20,8 @@ test "$ready" = 1 || { echo 'Backend did not start'; exit 1; }
 grep -q '"service":"SpeedPulseBackend"' /tmp/speedpulse-health.json
 curl --silent --fail "$host/api/config" -o /tmp/speedpulse-config.json
 grep -q '"maxDownloadBytes":67108864' /tmp/speedpulse-config.json
+grep -q '"maxConcurrentTransfers":4' /tmp/speedpulse-config.json
+grep -q '"activeTransfers":0' /tmp/speedpulse-health.json
 grep -q '"id":"quick","downloadBytes":5242880,"uploadBytes":1048576' /tmp/speedpulse-config.json
 grep -q '"id":"standard","downloadBytes":26214400,"uploadBytes":5242880' /tmp/speedpulse-config.json
 grep -q '"id":"thorough","downloadBytes":52428800,"uploadBytes":8388608' /tmp/speedpulse-config.json
@@ -66,6 +68,7 @@ limited_host='http://127.0.0.1:5088'
   SpeedPulse__MaxDownloadBytes=10485760 \
   SpeedPulse__MaxUploadBytes=2097152 \
   SpeedPulse__RateLimitRequestsPerMinute=12 \
+  SpeedPulse__MaxConcurrentTransfers=1 \
   dotnet ./SpeedPulseBackend.dll --urls "$limited_host"
 ) >/tmp/speedpulse-limited.log 2>&1 &
 limited_pid=$!
@@ -83,6 +86,7 @@ test "$limited_ready" = 1 || { echo 'Limited backend did not start'; exit 1; }
 grep -q '"maxDownloadBytes":10485760' /tmp/speedpulse-limited.json
 grep -q '"maxUploadBytes":2097152' /tmp/speedpulse-limited.json
 grep -q '"rateLimitRequestsPerMinute":12' /tmp/speedpulse-limited.json
+grep -q '"maxConcurrentTransfers":1' /tmp/speedpulse-limited.json
 grep -q '"id":"standard","downloadBytes":10485760,"uploadBytes":2097152' /tmp/speedpulse-limited.json
 code=$(curl --silent -o /dev/null -w '%{http_code}' "$limited_host/api/down?bytes=10485761")
 test "$code" = 400
@@ -90,4 +94,48 @@ code=$(head -c 3145728 /dev/zero | curl --silent -o /dev/null \
   -w '%{http_code}' -X POST --data-binary @- "$limited_host/api/up" || true)
 test "$code" = 413 || { echo "Custom upload limit should return 413, got $code"; exit 1; }
 
-echo 'SpeedPulse ASP.NET default and custom-limits smoke tests passed.'
+# Saturation smoke: hold one deliberately slow upload open, verify that a
+# second body-transfer request is rejected but control/latency routes work.
+# Avoid an artificial sleep-only assertion: poll the observable active count.
+head -c 262144 /dev/zero > /tmp/speedpulse-slow-upload.bin
+curl --silent --show-error --max-time 25 --limit-rate 1024 \
+  -X POST --data-binary @/tmp/speedpulse-slow-upload.bin \
+  "$limited_host/api/up" -o /tmp/speedpulse-slow-upload.json \
+  >/tmp/speedpulse-slow-curl.log 2>&1 &
+slow_pid=$!
+trap 'kill "$slow_pid" "$limited_pid" "$pid" 2>/dev/null || true' EXIT
+
+occupied=0
+for attempt in $(seq 1 100); do
+  if curl --silent --fail "$limited_host/api/health" | grep -q '"activeTransfers":1'; then
+    occupied=1
+    break
+  fi
+  sleep 0.1
+done
+test "$occupied" = 1 || { echo 'Slow upload never acquired the transfer slot'; exit 1; }
+
+code=$(curl --silent -o /dev/null -w '%{http_code}' "$limited_host/api/down?bytes=1024")
+test "$code" = 429 || { echo "Expected concurrency HTTP 429, got: $code"; exit 1; }
+headers=$(curl --silent --dump-header - --output /dev/null "$limited_host/api/down?bytes=1024")
+printf '%s' "$headers" | grep -qi '^retry-after: 2'
+code=$(curl --silent -o /dev/null -w '%{http_code}' "$limited_host/api/down?bytes=0")
+test "$code" = 200 || { echo "Zero-byte probe rejected at capacity: $code"; exit 1; }
+curl --silent --fail "$limited_host/api/config" | grep -q '"maxConcurrentTransfers":1'
+
+kill "$slow_pid" 2>/dev/null || true
+wait "$slow_pid" 2>/dev/null || true
+
+released=0
+for attempt in $(seq 1 100); do
+  if curl --silent --fail "$limited_host/api/health" | grep -q '"activeTransfers":0'; then
+    released=1
+    break
+  fi
+  sleep 0.1
+done
+test "$released" = 1 || { echo 'Transfer slot leaked after cancellation'; exit 1; }
+code=$(curl --silent -o /dev/null -w '%{http_code}' "$limited_host/api/down?bytes=1024")
+test "$code" = 200 || { echo "Transfer slot not reusable: $code"; exit 1; }
+
+echo 'SpeedPulse ASP.NET default, custom-limits, concurrency and cancellation smoke tests passed.'
