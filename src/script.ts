@@ -11,7 +11,9 @@ import { runPingTest, runDownloadTest, runUploadTest, abortTest, explainTestErro
 import { getTestProfile, loadTestProfile, saveTestProfile, effectiveTestBudget } from './test-profiles.js';
 import type { ServerBudgetLimits } from './test-profiles.js';
 import type { SpeedServer } from './speedtest.js';
-import { getHistory, saveResult, clearHistory, exportToCSV } from './history.js';
+import { getHistory, saveResult, clearHistory, exportToCSV,
+    endpointLabel, areResultsComparable, previousComparableBest } from './history.js';
+import type { SpeedTestResult } from './history.js';
 
 // Elements
 const startBtn = document.getElementById('start-btn');
@@ -100,8 +102,13 @@ async function startTest() {
         : null;
     const budget = effectiveTestBudget(profile, serverLimits);
     let activeStage: 'ping' | 'download' | 'upload' = 'ping';
-    const finalResult: { isp: string | null; profile: string; ping?: number; jitter?: number; packetLoss?: number; download?: number; upload?: number } =
-        { isp: document.getElementById('info-isp').textContent, profile: profile.id };
+    const finalResult: SpeedTestResult = {
+        isp: document.getElementById('info-isp').textContent,
+        profile: profile.id,
+        server,
+        downloadBytes: budget.downloadBytes,
+        uploadBytes: budget.uploadBytes,
+    };
 
     try {
         // Initialization / Warm-up Phase
@@ -125,7 +132,7 @@ async function startTest() {
         valJitter!.textContent = Math.round(jitter).toString();
         finalResult.ping = ping;
         finalResult.jitter = jitter;
-        finalResult.packetLoss = packetLoss; // fraction of failed HTTP probes, not network packet loss
+        finalResult.packetLoss = packetLoss; // percentage of failed HTTP probes, not IP packet loss
 
         // Download
         activeStage = 'download';
@@ -185,7 +192,11 @@ async function startTest() {
         updateGauge(finalDown); // Leave gauge at download speed
 
         // Calculate Grade
-        const gradeObj = uploadError ? {
+        const gradeObj = server === 'local' ? {
+          grade: '-',
+          text: 'Local ASP.NET measurement (LAN/loopback path), not an Internet speed grade.' +
+            (uploadError ? ' Upload unavailable. ' + uploadError : '')
+        } : uploadError ? {
           grade: '-',
           text: 'Partial result: download and ping measured; upload unavailable. ' + uploadError
         } : calculateGrade(finalDown, finalUp, ping);
@@ -194,7 +205,7 @@ async function startTest() {
 
         // Heuristic status: do not classify unavailable measurements as failures.
         const indicators = document.querySelectorAll('.status-indicator');
-        const readiness = calculateReadiness({ download: finalDown, upload: finalUp, ping, jitter });
+        const readiness = calculateReadiness({ download: finalDown, upload: finalUp, ping, jitter, server });
         READINESS_ORDER.forEach((key, index) => {
             const indicator = indicators[index];
             if (!indicator) return;
@@ -202,22 +213,20 @@ async function startTest() {
             indicator.className = 'status-indicator' +
                 (status === 'unknown' ? '' : ' status-' + status);
             indicator.setAttribute('aria-label', status === 'unknown'
-                ? 'Not enough measured data' : (status === 'pass' ? 'Likely suitable' : 'May be unsuitable'));
+                ? (server === 'local' ? 'Internet suitability not assessed by local test' :
+                    'Not enough measured data') :
+                    (status === 'pass' ? 'Likely suitable' : 'May be unsuitable'));
         });
-        saveResult(finalResult);
+        const updatedHistory = saveResult(finalResult);
         renderHistory();
 
         try { playSound('finish'); } catch (error) { console.warn('Audio notification skipped:', error); }
 
-        // Check personal best
-        const history = getHistory();
-        if (history.length > 1) {
-            const previousBest = Math.max(...history.slice(1).map(h => h.download || 0));
-            if (finalDown > previousBest) {
-                try { fireConfetti(); } catch (error) { console.warn('Celebration animation skipped:', error); }
-            }
-        } else if (finalDown > 100) {
-            try { fireConfetti(); } catch (error) { console.warn('Celebration animation skipped:', error); } // First time but really fast
+        // Only count a new high when an earlier run used the same endpoint,
+        // profile and actual byte budgets. Legacy records remain unranked.
+        const previousBest = previousComparableBest(updatedHistory.slice(1), finalResult);
+        if (previousBest !== null && finalDown > previousBest) {
+            try { fireConfetti(); } catch (error) { console.warn('Celebration animation skipped:', error); }
         }
 
     } catch (e) {
@@ -310,7 +319,7 @@ function renderHistory() {
     tbody.innerHTML = '';
 
     if (history.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No tests run yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">No tests run yet.</td></tr>';
         return;
     }
 
@@ -339,7 +348,9 @@ function renderHistory() {
         const tdISP = document.createElement('td');
         tdISP.textContent = item.isp || 'Unknown';
 
-        tr.append(tdCheck, tdDate, tdDown, tdUp, tdPing, tdISP);
+        const tdServer = document.createElement('td');
+        tdServer.textContent = endpointLabel(item.server);
+        tr.append(tdCheck, tdDate, tdDown, tdUp, tdPing, tdISP, tdServer);
         tbody.appendChild(tr);
     });
 }
@@ -561,10 +572,15 @@ function compareResults() {
 
     const modal = document.getElementById('compare-modal');
     const grid = document.getElementById('compare-grid');
+    const comparisonWarning = areResultsComparable(res1, res2) ? '' :
+        '<p role="status">Not directly comparable: endpoint or data budget differs, ' +
+        'or one result predates endpoint tracking. Values are shown for reference only.</p>';
 
     grid.innerHTML = `
+        ${comparisonWarning}
         <div class="glass-panel" style="background:var(--hover-bg)">
             <h3>Result 1</h3>
+            <p><strong>Endpoint:</strong> ${endpointLabel(res1.server)}</p>
             <p><strong>Date:</strong> ${new Date(res1.date).toLocaleDateString()}</p>
             <p><strong>Download:</strong> ${res1.download?.toFixed(2)} Mbps</p>
             <p><strong>Upload:</strong> ${res1.upload?.toFixed(2)} Mbps</p>
@@ -572,6 +588,7 @@ function compareResults() {
         </div>
         <div class="glass-panel" style="background:var(--hover-bg)">
             <h3>Result 2</h3>
+            <p><strong>Endpoint:</strong> ${endpointLabel(res2.server)}</p>
             <p><strong>Date:</strong> ${new Date(res2.date).toLocaleDateString()}</p>
             <p><strong>Download:</strong> ${res2.download?.toFixed(2)} Mbps</p>
             <p><strong>Upload:</strong> ${res2.upload?.toFixed(2)} Mbps</p>

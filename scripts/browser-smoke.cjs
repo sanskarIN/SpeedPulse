@@ -200,6 +200,12 @@ async function main() {
     for (const field of ['ping', 'down', 'up']) assert.match(success[field], /\d/);
     assert.equal(success.progress, 100);
     assert.equal(success.visibleProgress, '100%');
+    const recorded = await evaluate(`(() => ({
+      endpoint: document.querySelector('#history-body tr td:last-child')?.textContent,
+      grade: document.getElementById('grade-desc')?.textContent,
+    }))()`);
+    assert.equal(recorded.endpoint, 'Cloudflare CDN');
+    assert.ok(!/Local ASP.NET measurement/.test(recorded.grade));
     assert.deepEqual(success.alerts, []);
     assert.deepEqual(success.errors, []);
     assert.ok(success.requests.some(url => url.includes('/__down?bytes=5242880')));

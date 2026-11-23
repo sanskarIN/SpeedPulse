@@ -45,3 +45,11 @@ test('browser script contains real latency data and HTTPS location fallback', ()
   assert.doesNotMatch(js, /http:\/\/ip-api\.com/);
   assert.match(js, /https:\/\/ipwho\.is\//);
 });
+
+test('history UI and compiled dashboard identify measurement endpoints', () => {
+  assert.match(read('index.html'), /<th>Endpoint<\/th>/);
+  const js = read('bundle.js');
+  assert.match(js, /Unknown \(legacy\)/);
+  assert.match(js, /LAN\/loopback path/);
+  assert.match(js, /Not directly comparable: endpoint or data budget differs/);
+});

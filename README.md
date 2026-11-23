@@ -141,6 +141,20 @@ These changes are **not included in the published v1.0.0 tag**.
 Read the [post-v1.0.0 development guide](./docs/post-v1.0.0-development.md)
 for configuration, transfer budgets, test coverage, and release boundaries.
 
+## Measurement provenance and fair comparisons
+
+New measurements record whether the traffic went to **Cloudflare CDN** or the
+**local ASP.NET server**, alongside their selected profile and effective transfer
+byte budgets. The history table and CSV export retain the endpoint label.
+Older records stay readable as **Unknown (legacy)**, never silently reclassified.
+
+Local ASP.NET results describe performance to your own server (which may be
+loopback or a LAN path). They are **not** graded as public Internet performance,
+and cannot establish streaming/gaming readiness. Personal-best comparisons only
+consider prior measurements with the same endpoint, profile, and byte budgets.
+The compare dialog warns when test contexts differ or are unknown. Results
+remain browser-level estimates, not controlled laboratory benchmarks.
+
 ## Stable release — v1.0.0
 
 **[Download SpeedPulse v1.0.0](https://github.com/sanskarIN/SpeedPulse/releases/tag/v1.0.0)** (October 17, 2026). The first stable release includes the corrected upload test, a fixed bandwidth chart, Developer Labs, and a self-hosted ASP.NET Core 10 backend. Download archives are available for Windows x64, Linux x64, Apple Silicon macOS, and static web hosting.

@@ -73,3 +73,71 @@ test('CSV export quotes cells and disarms spreadsheet formula injection', async 
   assert.match(csv, /"Partial"/);
   assert.ok(csv.includes('18.21'));
 });
+
+test('endpoint and actual byte budgets survive storage round-trips', () => {
+  const { api } = initHistory();
+  const record = api.saveResult({
+    isp: 'Example Network', server: 'cloudflare', profile: 'quick',
+    downloadBytes: 5242880, uploadBytes: 1048576,
+    download: 28.5, upload: 11.3, ping: 13,
+  })[0];
+  assert.equal(record.server, 'cloudflare');
+  assert.equal(record.downloadBytes, 5242880);
+  assert.equal(record.uploadBytes, 1048576);
+  assert.equal(api.getHistory()[0].server, 'cloudflare');
+  assert.equal(api.endpointLabel(record.server), 'Cloudflare CDN');
+});
+
+test('legacy histories remain visible but cannot be assigned a guessed endpoint', () => {
+  const { api } = initHistory(JSON.stringify([{
+    id: 'legacy-1', date: '2026-10-12T10:00:00.000Z', profile: 'standard',
+    download: 640, upload: 90, isp: 'Old Network',
+  }]));
+  const legacy = api.getHistory()[0];
+  assert.equal(legacy.server, undefined);
+  assert.equal(api.endpointLabel(legacy.server), 'Unknown (legacy)');
+  assert.equal(api.areResultsComparable(legacy, {
+    server: 'cloudflare', profile: 'standard',
+    downloadBytes: 26214400, uploadBytes: 5242880,
+  }), false);
+});
+
+test('unknown endpoints and invalid transfer byte budgets cannot spoof comparable records', () => {
+  const { api } = initHistory();
+  const [newest] = api.saveResult({
+    server: 'localhost', profile: 'thorough',
+    downloadBytes: 999999999, uploadBytes: -1, download: 999,
+  });
+  assert.equal(newest.server, undefined);
+  assert.equal(newest.downloadBytes, undefined);
+  assert.equal(newest.uploadBytes, undefined);
+});
+
+test('personal bests cannot mix Cloudflare, self-hosted, profiles or byte budgets', () => {
+  const { api } = initHistory();
+  const candidate = {
+    server: 'cloudflare', profile: 'quick',
+    downloadBytes: 5242880, uploadBytes: 1048576, download: 65,
+  };
+  const same = api.saveResult({ ...candidate, download: 42 })[0];
+  const local = api.saveResult({ ...candidate, server: 'local', download: 9000 })[0];
+  const thorough = api.saveResult({ ...candidate, profile: 'thorough', download: 500 })[0];
+  const capped = api.saveResult({ ...candidate, downloadBytes: 1048576, download: 160 })[0];
+  const legacy = api.saveResult({ download: 800, profile: 'quick' })[0];
+  assert.equal(api.previousComparableBest([same, local, thorough, capped, legacy], candidate), 42);
+  assert.equal(api.areResultsComparable(same, candidate), true);
+  assert.equal(api.areResultsComparable(local, candidate), false);
+  assert.equal(api.areResultsComparable(thorough, candidate), false);
+  assert.equal(api.areResultsComparable(capped, candidate), false);
+  assert.equal(api.previousComparableBest([local, legacy], candidate), null);
+});
+
+test('CSV shows source attribution and byte budgets without guessing legacy values', async () => {
+  const { api, state } = initHistory();
+  api.saveResult({ server: 'local', profile: 'quick',
+    downloadBytes: 5242880, uploadBytes: 1048576, download: 100 });
+  api.exportToCSV();
+  const csv = await state.blob.text();
+  assert.ok(csv.includes('"Server","Download bytes","Upload bytes"'));
+  assert.ok(csv.includes('"Local ASP.NET","5242880","1048576"'));
+});

@@ -273,6 +273,9 @@
     return values.every(valid) ? passes() ? "pass" : "fail" : "unknown";
   }
   function calculateReadiness(metrics) {
+    if (metrics.server === "local") {
+      return { streaming4K: "unknown", videoCalls: "unknown", gaming: "unknown", largeUploads: "unknown" };
+    }
     const { download: download2, upload: upload2, ping, jitter } = metrics;
     return {
       streaming4K: check([download2], () => download2 > 25),
@@ -575,6 +578,14 @@
   function cleanNumber(value) {
     return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : void 0;
   }
+  function cleanTransferBytes(value, maximum) {
+    return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= maximum ? value : void 0;
+  }
+  function endpointLabel(server) {
+    if (server === "cloudflare") return "Cloudflare CDN";
+    if (server === "local") return "Local ASP.NET";
+    return "Unknown (legacy)";
+  }
   function cleanEntry(input) {
     if (!input || typeof input !== "object") return null;
     const item = input;
@@ -586,6 +597,9 @@
       date: item.date,
       isp: typeof item.isp === "string" ? item.isp.slice(0, 200) : "Unknown",
       profile: ["quick", "standard", "thorough"].includes(String(item.profile)) ? String(item.profile) : void 0,
+      server: item.server === "cloudflare" || item.server === "local" ? item.server : void 0,
+      downloadBytes: cleanTransferBytes(item.downloadBytes, 64 * 1024 * 1024),
+      uploadBytes: cleanTransferBytes(item.uploadBytes, 8 * 1024 * 1024),
       download: cleanNumber(item.download),
       upload: cleanNumber(item.upload),
       ping: cleanNumber(item.ping),
@@ -618,6 +632,13 @@
     }
     return history;
   }
+  function areResultsComparable(a, b) {
+    return !!a.server && a.server === b.server && !!a.profile && a.profile === b.profile && typeof a.downloadBytes === "number" && a.downloadBytes > 0 && a.downloadBytes === b.downloadBytes && typeof a.uploadBytes === "number" && a.uploadBytes > 0 && a.uploadBytes === b.uploadBytes;
+  }
+  function previousComparableBest(entries, candidate) {
+    const prior = entries.filter((entry) => areResultsComparable(entry, candidate) && typeof entry.download === "number" && Number.isFinite(entry.download));
+    return prior.length ? Math.max(...prior.map((entry) => entry.download)) : null;
+  }
   function clearHistory() {
     try {
       localStorage.removeItem(STORAGE_KEY2);
@@ -641,6 +662,9 @@
       "Jitter (ms)",
       "ISP",
       "Profile",
+      "Server",
+      "Download bytes",
+      "Upload bytes",
       "Status"
     ];
     const rows = history.map((item) => [
@@ -651,6 +675,9 @@
       item.jitter?.toFixed(0) ?? "",
       item.isp ?? "Unknown",
       item.profile ?? "legacy",
+      endpointLabel(item.server),
+      item.downloadBytes ?? "",
+      item.uploadBytes ?? "",
       item.upload == null ? "Partial" : "Complete"
     ]);
     const csvContent = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
@@ -748,7 +775,13 @@
         const serverLimits = server === "local" ? window.speedpulseServerLimits : null;
         const budget = effectiveTestBudget(profile, serverLimits);
         let activeStage = "ping";
-        const finalResult = { isp: document.getElementById("info-isp").textContent, profile: profile.id };
+        const finalResult = {
+          isp: document.getElementById("info-isp").textContent,
+          profile: profile.id,
+          server,
+          downloadBytes: budget.downloadBytes,
+          uploadBytes: budget.uploadBytes
+        };
         try {
           setGaugePhase("Finding Optimal Server...");
           gaugeSpeed.textContent = "...";
@@ -817,39 +850,33 @@
           ensureActive();
           setGaugePhase("Finished");
           updateGauge(finalDown);
-          const gradeObj = uploadError ? {
+          const gradeObj = server === "local" ? {
+            grade: "-",
+            text: "Local ASP.NET measurement (LAN/loopback path), not an Internet speed grade." + (uploadError ? " Upload unavailable. " + uploadError : "")
+          } : uploadError ? {
             grade: "-",
             text: "Partial result: download and ping measured; upload unavailable. " + uploadError
           } : calculateGrade(finalDown, finalUp, ping);
           document.getElementById("overall-grade").textContent = gradeObj.grade;
           document.getElementById("grade-desc").textContent = gradeObj.text;
           const indicators = document.querySelectorAll(".status-indicator");
-          const readiness = calculateReadiness({ download: finalDown, upload: finalUp, ping, jitter });
+          const readiness = calculateReadiness({ download: finalDown, upload: finalUp, ping, jitter, server });
           READINESS_ORDER.forEach((key, index) => {
             const indicator = indicators[index];
             if (!indicator) return;
             const status = readiness[key];
             indicator.className = "status-indicator" + (status === "unknown" ? "" : " status-" + status);
-            indicator.setAttribute("aria-label", status === "unknown" ? "Not enough measured data" : status === "pass" ? "Likely suitable" : "May be unsuitable");
+            indicator.setAttribute("aria-label", status === "unknown" ? server === "local" ? "Internet suitability not assessed by local test" : "Not enough measured data" : status === "pass" ? "Likely suitable" : "May be unsuitable");
           });
-          saveResult(finalResult);
+          const updatedHistory = saveResult(finalResult);
           renderHistory();
           try {
             playSound("finish");
           } catch (error) {
             console.warn("Audio notification skipped:", error);
           }
-          const history = getHistory();
-          if (history.length > 1) {
-            const previousBest = Math.max(...history.slice(1).map((h) => h.download || 0));
-            if (finalDown > previousBest) {
-              try {
-                fireConfetti();
-              } catch (error) {
-                console.warn("Celebration animation skipped:", error);
-              }
-            }
-          } else if (finalDown > 100) {
+          const previousBest = previousComparableBest(updatedHistory.slice(1), finalResult);
+          if (previousBest !== null && finalDown > previousBest) {
             try {
               fireConfetti();
             } catch (error) {
@@ -933,7 +960,7 @@
         const tbody = document.getElementById("history-body");
         tbody.innerHTML = "";
         if (history.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No tests run yet.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">No tests run yet.</td></tr>';
           return;
         }
         history.forEach((item, index) => {
@@ -954,7 +981,9 @@
           tdPing.textContent = Number.isFinite(item.ping) ? Math.round(item.ping) + " ms" : "--";
           const tdISP = document.createElement("td");
           tdISP.textContent = item.isp || "Unknown";
-          tr.append(tdCheck, tdDate, tdDown, tdUp, tdPing, tdISP);
+          const tdServer = document.createElement("td");
+          tdServer.textContent = endpointLabel(item.server);
+          tr.append(tdCheck, tdDate, tdDown, tdUp, tdPing, tdISP, tdServer);
           tbody.appendChild(tr);
         });
       }
@@ -1134,9 +1163,12 @@
         const res2 = history[checked[1].value];
         const modal = document.getElementById("compare-modal");
         const grid = document.getElementById("compare-grid");
+        const comparisonWarning = areResultsComparable(res1, res2) ? "" : '<p role="status">Not directly comparable: endpoint or data budget differs, or one result predates endpoint tracking. Values are shown for reference only.</p>';
         grid.innerHTML = `
+        ${comparisonWarning}
         <div class="glass-panel" style="background:var(--hover-bg)">
             <h3>Result 1</h3>
+            <p><strong>Endpoint:</strong> ${endpointLabel(res1.server)}</p>
             <p><strong>Date:</strong> ${new Date(res1.date).toLocaleDateString()}</p>
             <p><strong>Download:</strong> ${res1.download?.toFixed(2)} Mbps</p>
             <p><strong>Upload:</strong> ${res1.upload?.toFixed(2)} Mbps</p>
@@ -1144,6 +1176,7 @@
         </div>
         <div class="glass-panel" style="background:var(--hover-bg)">
             <h3>Result 2</h3>
+            <p><strong>Endpoint:</strong> ${endpointLabel(res2.server)}</p>
             <p><strong>Date:</strong> ${new Date(res2.date).toLocaleDateString()}</p>
             <p><strong>Download:</strong> ${res2.download?.toFixed(2)} Mbps</p>
             <p><strong>Upload:</strong> ${res2.upload?.toFixed(2)} Mbps</p>

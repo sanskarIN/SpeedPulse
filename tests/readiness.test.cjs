@@ -39,3 +39,17 @@ test('corrupted and non-finite data cannot mark a readiness hint as passing', ()
   });
   for (const key of READINESS_ORDER) assert.equal(result[key], 'unknown');
 });
+
+test('local ASP.NET throughput is not treated as Internet-service readiness', () => {
+  const local = calculateReadiness({
+    server: 'local', download: 10000, upload: 10000, ping: 1, jitter: 0,
+  });
+  for (const key of READINESS_ORDER) assert.equal(local[key], 'unknown');
+});
+
+test('public CDN measurements retain readiness classification', () => {
+  const remote = calculateReadiness({
+    server: 'cloudflare', download: 100, upload: 100, ping: 4, jitter: 1,
+  });
+  for (const key of READINESS_ORDER) assert.equal(remote[key], 'pass');
+});
