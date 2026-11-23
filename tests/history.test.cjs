@@ -68,7 +68,7 @@ test('CSV export quotes cells and disarms spreadsheet formula injection', async 
   api.exportToCSV();
   assert.ok(state.blob);
   const csv = await state.blob.text();
-  assert.match(csv, /Profile","Status/);
+  assert.match(csv, /Profile","Server","Download bytes","Upload bytes","Status/);
   assert.ok(csv.includes("'=HYPERLINK("));
   assert.match(csv, /"Partial"/);
   assert.ok(csv.includes('18.21'));
