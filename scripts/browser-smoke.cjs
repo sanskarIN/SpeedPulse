@@ -268,8 +268,8 @@ async function main() {
       };
     })()`);
     assert.equal(localResult.grade, '-');
-    assert.match(localResult.message, /LAN\/loopback path/);
-    assert.match(localResult.sourceNote, /not public Internet speed/);
+    assert.match(localResult.message, /not a general Internet speed grade/);
+    assert.match(localResult.sourceNote, /not general ISP speed/);
     assert.equal(localResult.endpoint, 'Local ASP.NET');
     assert.equal(localResult.saved[0].server, 'local');
     assert.equal(localResult.saved[0].downloadBytes, 5242880);

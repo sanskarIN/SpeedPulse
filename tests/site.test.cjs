@@ -50,7 +50,7 @@ test('history UI and compiled dashboard identify measurement endpoints', () => {
   assert.match(read('index.html'), /<th>Endpoint<\/th>/);
   const js = read('bundle.js');
   assert.match(js, /Unknown \(legacy\)/);
-  assert.match(js, /LAN\/loopback path/);
+  assert.match(js, /not a general Internet speed grade/);
   assert.match(js, /Not directly comparable: endpoint or data budget differs/);
 });
 
@@ -69,6 +69,6 @@ test('shareable gauge capture contains the endpoint provenance label', () => {
   assert.match(html, /id="measurement-source-note"/);
   assert.ok(html.indexOf('id="measurement-source-note"') > html.indexOf('id="capture-area"'));
   assert.ok(html.indexOf('id="measurement-source-note"') < html.indexOf('id="share-btn"'));
-  assert.match(read('bundle.js'), /Local ASP.NET server — measuring this LAN\/loopback path/);
+  assert.match(read('bundle.js'), /Local ASP.NET server — measuring the path to this host/);
   assert.match(read('styles.css'), /\.measurement-source-note/);
 });

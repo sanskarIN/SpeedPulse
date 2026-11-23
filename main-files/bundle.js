@@ -772,7 +772,7 @@
           console.warn("Audio notification skipped:", error);
         }
         const server = document.getElementById("server-select").value;
-        if (measurementSourceNote) measurementSourceNote.textContent = server === "local" ? "Local ASP.NET server — measuring this LAN/loopback path, not public Internet speed." : "Cloudflare CDN — public Internet path (browser-level estimate).";
+        if (measurementSourceNote) measurementSourceNote.textContent = server === "local" ? "Local ASP.NET server — measuring the path to this host (which may be LAN or loopback), not general ISP speed." : "Cloudflare CDN — public Internet path (browser-level estimate).";
         const profile = getTestProfile(document.getElementById("test-profile-select").value);
         const serverLimits = server === "local" ? window.speedpulseServerLimits : null;
         const budget = effectiveTestBudget(profile, serverLimits);
@@ -854,7 +854,7 @@
           updateGauge(finalDown);
           const gradeObj = server === "local" ? {
             grade: "-",
-            text: "Local ASP.NET measurement (LAN/loopback path), not an Internet speed grade." + (uploadError ? " Upload unavailable. " + uploadError : "")
+            text: "Local ASP.NET measurement to this server; not a general Internet speed grade." + (uploadError ? " Upload unavailable. " + uploadError : "")
           } : uploadError ? {
             grade: "-",
             text: "Partial result: download and ping measured; upload unavailable. " + uploadError

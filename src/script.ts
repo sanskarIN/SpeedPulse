@@ -97,7 +97,7 @@ async function startTest() {
 
     const server = (document.getElementById('server-select') as HTMLSelectElement).value as SpeedServer;
     if (measurementSourceNote) measurementSourceNote.textContent = server === 'local'
-        ? 'Local ASP.NET server — measuring this LAN/loopback path, not public Internet speed.'
+        ? 'Local ASP.NET server — measuring the path to this host (which may be LAN or loopback), not general ISP speed.'
         : 'Cloudflare CDN — public Internet path (browser-level estimate).';
     // Freeze the budget for this run, even if the user later changes preferences.
     const profile = getTestProfile((document.getElementById('test-profile-select') as HTMLSelectElement).value);
@@ -198,7 +198,7 @@ async function startTest() {
         // Calculate Grade
         const gradeObj = server === 'local' ? {
           grade: '-',
-          text: 'Local ASP.NET measurement (LAN/loopback path), not an Internet speed grade.' +
+          text: 'Local ASP.NET measurement to this server; not a general Internet speed grade.' +
             (uploadError ? ' Upload unavailable. ' + uploadError : '')
         } : uploadError ? {
           grade: '-',
