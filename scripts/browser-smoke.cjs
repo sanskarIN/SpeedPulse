@@ -232,8 +232,10 @@ async function main() {
     const recorded = await evaluate(`(() => ({
       endpoint: document.querySelector('#history-body tr td:last-child')?.textContent,
       grade: document.getElementById('grade-desc')?.textContent,
+      sourceNote: document.getElementById('measurement-source-note')?.textContent,
     }))()`);
     assert.equal(recorded.endpoint, 'Cloudflare CDN');
+    assert.match(recorded.sourceNote, /Cloudflare CDN/);
     assert.ok(!/Local ASP.NET measurement/.test(recorded.grade));
     assert.deepEqual(success.alerts, []);
     assert.deepEqual(success.errors, []);
@@ -258,6 +260,7 @@ async function main() {
       return {
         grade: document.getElementById('overall-grade')?.textContent,
         message: document.getElementById('grade-desc')?.textContent,
+        sourceNote: document.getElementById('measurement-source-note')?.textContent,
         endpoint: document.querySelector('#history-body tr td:last-child')?.textContent,
         saved,
         statuses,
@@ -266,6 +269,7 @@ async function main() {
     })()`);
     assert.equal(localResult.grade, '-');
     assert.match(localResult.message, /LAN\/loopback path/);
+    assert.match(localResult.sourceNote, /not public Internet speed/);
     assert.equal(localResult.endpoint, 'Local ASP.NET');
     assert.equal(localResult.saved[0].server, 'local');
     assert.equal(localResult.saved[0].downloadBytes, 5242880);

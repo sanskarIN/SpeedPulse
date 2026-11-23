@@ -33,6 +33,7 @@ const valUp = document.getElementById('val-up');
 
 const progDown = document.getElementById('prog-down');
 const downloadProgressLabel = document.getElementById('download-progress-label');
+const measurementSourceNote = document.getElementById('measurement-source-note');
 const progUp = document.getElementById('prog-up');
 
 // State
@@ -95,6 +96,9 @@ async function startTest() {
     try { playSound('start'); } catch (error) { console.warn('Audio notification skipped:', error); }
 
     const server = (document.getElementById('server-select') as HTMLSelectElement).value as SpeedServer;
+    if (measurementSourceNote) measurementSourceNote.textContent = server === 'local'
+        ? 'Local ASP.NET server — measuring this LAN/loopback path, not public Internet speed.'
+        : 'Cloudflare CDN — public Internet path (browser-level estimate).';
     // Freeze the budget for this run, even if the user later changes preferences.
     const profile = getTestProfile((document.getElementById('test-profile-select') as HTMLSelectElement).value);
     const serverLimits = server === 'local'

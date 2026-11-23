@@ -62,3 +62,13 @@ test('partial history comparisons display unavailable values, not NaN or undefin
   assert.doesNotMatch(source, /Math\.round\(res2\.ping\)/);
   assert.match(read('bundle.js'), /function displayComparisonMetric/);
 });
+
+test('shareable gauge capture contains the endpoint provenance label', () => {
+  const html = read('index.html');
+  assert.match(html, /id="capture-area"/);
+  assert.match(html, /id="measurement-source-note"/);
+  assert.ok(html.indexOf('id="measurement-source-note"') > html.indexOf('id="capture-area"'));
+  assert.ok(html.indexOf('id="measurement-source-note"') < html.indexOf('id="share-btn"'));
+  assert.match(read('bundle.js'), /Local ASP.NET server — measuring this LAN\/loopback path/);
+  assert.match(read('styles.css'), /\.measurement-source-note/);
+});

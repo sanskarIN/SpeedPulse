@@ -721,6 +721,7 @@
       var valUp = document.getElementById("val-up");
       var progDown = document.getElementById("prog-down");
       var downloadProgressLabel = document.getElementById("download-progress-label");
+      var measurementSourceNote = document.getElementById("measurement-source-note");
       var progUp = document.getElementById("prog-up");
       var isTesting = false;
       var testGeneration = 0;
@@ -771,6 +772,7 @@
           console.warn("Audio notification skipped:", error);
         }
         const server = document.getElementById("server-select").value;
+        if (measurementSourceNote) measurementSourceNote.textContent = server === "local" ? "Local ASP.NET server — measuring this LAN/loopback path, not public Internet speed." : "Cloudflare CDN — public Internet path (browser-level estimate).";
         const profile = getTestProfile(document.getElementById("test-profile-select").value);
         const serverLimits = server === "local" ? window.speedpulseServerLimits : null;
         const budget = effectiveTestBudget(profile, serverLimits);

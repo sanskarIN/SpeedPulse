@@ -948,3 +948,14 @@ input[type="color"]::-webkit-color-swatch {
 }
 /* The code ends here. */
 /* Thanks */
+
+/* Provenance is included in the shareable gauge capture, not just history. */
+.measurement-source-note {
+    margin: .75rem auto 1rem;
+    max-width: 48rem;
+    padding: 0 .75rem;
+    text-align: center;
+    line-height: 1.45;
+    font-size: .85rem;
+    color: var(--text-secondary);
+}
