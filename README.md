@@ -9,7 +9,7 @@ SpeedPulse provides a responsive speed-test dashboard with latency, download, up
 - **Hosted / GitHub Pages:** Static frontend using Cloudflare's public speed-test endpoints. No .NET backend runs on GitHub Pages.
 - **Self-hosted / local:** ASP.NET Core 10 app with `/api/down` and `/api/up` endpoints. When testing from the same machine, the local option measures loopback throughput **not** ISP speed.
 
-> **Measurement caveat:** Results are browser-level estimates influenced by browser, device, load, server, network path and external-service availability. Failed HTTP probes are not the same thing as true IP packet loss; the "packet loss" display represents failed application-layer samples. Browser Fetch does not expose precise upload byte progress; SpeedPulse now reports an upload result only after the server confirms success.
+> **Measurement caveat:** Results are browser-level estimates influenced by browser, device, load, server, network path and external-service availability. Failed HTTP probes are not the same thing as true IP packet loss; the "packet loss" display represents failed application-layer samples. Browser Fetch does not expose precise upload byte progress; SpeedPulse reports an upload result only after the server confirms success. In local ASP.NET mode, the frontend also verifies the server's acknowledged byte count before displaying a result.
 
 ## Try it
 

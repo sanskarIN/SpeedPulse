@@ -161,3 +161,21 @@ Exercise all three profiles using both Cloudflare and a self-hosted ASP.NET
 Core server; check mobile layout, the effect of an intentionally reduced server
 limit, network errors, cancellation, and history/CSV export. The new features
 are development work only until the maintainer requests a new stable tag.
+
+## Transfer integrity (November 2026)
+
+The TypeScript engine now stops a download immediately when a server sends
+more payload bytes than the selected test requested. Its response reader is
+explicitly cancelled on an overrun, abort, or deadline, including when a stream
+ignores the ordinary fetch abort signal. A failed transfer is not displayed as
+a completed measurement.
+
+For self-hosted tests, the ASP.NET `POST /api/up` response already reports
+`bytesReceived`. The browser now accepts a local upload speed only when that
+JSON acknowledgement exactly matches the requested number of bytes.
+Missing, malformed, or mismatched acknowledgements produce an inline partial
+result. Cloudflare upload behavior is unchanged because its acknowledgement
+format is controlled by the third-party service.
+
+These checks bound *intended* downloaded bytes and prevent misleading local
+upload results, not underlying protocol overhead or network-level variability.
