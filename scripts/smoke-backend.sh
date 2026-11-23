@@ -117,7 +117,7 @@ test "$occupied" = 1 || { echo 'Slow upload never acquired the transfer slot'; e
 
 code=$(curl --silent -o /dev/null -w '%{http_code}' "$limited_host/api/down?bytes=1024")
 test "$code" = 429 || { echo "Expected concurrency HTTP 429, got: $code"; exit 1; }
-headers=$(curl --silent --head "$limited_host/api/down?bytes=1024")
+headers=$(curl --silent --dump-header - --output /dev/null "$limited_host/api/down?bytes=1024")
 printf '%s' "$headers" | grep -qi '^retry-after: 2'
 code=$(curl --silent -o /dev/null -w '%{http_code}' "$limited_host/api/down?bytes=0")
 test "$code" = 200 || { echo "Zero-byte probe rejected at capacity: $code"; exit 1; }
