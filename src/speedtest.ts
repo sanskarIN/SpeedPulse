@@ -9,7 +9,7 @@ export type ProgressListener = (value: number, completedFraction?: number) => vo
 export interface PingResult {
     ping: number;
     jitter: number;
-    packetLoss: number; // fraction of failed HTTP requests, not IP packet loss
+    packetLoss: number; // percentage of failed HTTP requests, not IP packet loss
 }
 
 export const MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
@@ -128,6 +128,8 @@ export function explainTestError(error: unknown, stage: TestStage, server: Speed
     if (/HTTP 429\b/.test(message)) return 'The test endpoint is rate-limiting requests (HTTP 429). Try again later.';
     if (/HTTP 413\b/.test(message)) return 'The selected payload exceeds the server limit (HTTP 413). Try Quick mode.';
     if (/HTTP 5\d\d\b/.test(message)) return `${stage} failed because the server returned an error. Try again later.`;
+    if (/Upload verification failed/.test(message)) return 'Upload could not be verified: the local server did not confirm the expected bytes.';
+    if (/Download exceeded requested size/.test(message)) return 'Download exceeded your selected data budget and was stopped.';
     if (error instanceof TypeError) return `${stage} could not reach the ${server === 'local' ? 'ASP.NET Core' : 'Cloudflare'} endpoint. Check connectivity or browser restrictions.`;
     return `${stage} could not be measured. Check the selected server and retry.`;
 }
@@ -200,20 +202,32 @@ export async function runDownloadTest(
         if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`);
         if (!response.body) throw new Error('Streaming download unavailable');
         const reader = response.body.getReader();
+        // Stop the underlying stream even if a browser transport ignores abort.
+        const cancelReader = () => {
+            try { void reader.cancel().catch(() => {}); } catch {
+                // A broken reader must not replace the original error.
+            }
+        };
+        signal.addEventListener('abort', cancelReader, { once: true });
+        let streamComplete = false;
         try {
             while (true) {
                 const { done, value } = await reader.read();
                 if (signal.aborted) throw cancelled();
-                if (done) break;
+                if (done) {
+                    streamComplete = true;
+                    break;
+                }
                 received += value.byteLength;
+                if (received > bytes) {
+                    throw new Error(`Download exceeded requested size: expected ${bytes} bytes, received at least ${received}`);
+                }
                 const seconds = (performance.now() - start) / 1000;
-                if (seconds > 0.1) safeProgress(onProgress, received * 8 / 1_000_000 / seconds, signal, Math.min(1, received / bytes));
+                if (seconds > 0.1) safeProgress(onProgress, received * 8 / 1_000_000 / seconds, signal, received / bytes);
             }
         } finally {
-            if (signal.aborted) {
-                // Do not delay error propagation waiting on a stalled stream.
-                void reader.cancel().catch(() => {});
-            }
+            signal.removeEventListener('abort', cancelReader);
+            if (!streamComplete) cancelReader();
         }
         if (received !== bytes) {
             throw new Error(`Incomplete download: expected ${bytes} bytes, received ${received}`);
@@ -248,8 +262,23 @@ export async function runUploadTest(
             mode: 'cors',
             signal,
         });
+        const responseTime = performance.now();
         if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
-        const seconds = (performance.now() - start) / 1000;
+        if (server === 'local') {
+            // A 2xx response alone does not prove all bytes reached ASP.NET.
+            let acknowledgement: unknown;
+            try {
+                acknowledgement = await response.json();
+            } catch {
+                throw new Error('Upload verification failed: invalid backend acknowledgement');
+            }
+            if (!acknowledgement || typeof acknowledgement !== 'object' ||
+                !('bytesReceived' in acknowledgement) ||
+                (acknowledgement as { bytesReceived: unknown }).bytesReceived !== bytes) {
+                throw new Error(`Upload verification failed: backend did not confirm ${bytes} bytes`);
+            }
+        }
+        const seconds = (responseTime - start) / 1000;
         const measured = seconds > 0 ? bytes * 8 / 1_000_000 / seconds : 0;
         safeProgress(onProgress, measured, signal);
         return measured;
