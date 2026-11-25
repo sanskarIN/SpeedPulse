@@ -9,7 +9,7 @@ SpeedPulse provides a responsive speed-test dashboard with latency, download, up
 - **Hosted / GitHub Pages:** Static frontend using Cloudflare's public speed-test endpoints. No .NET backend runs on GitHub Pages.
 - **Self-hosted / local:** ASP.NET Core 10 app with `/api/down` and `/api/up` endpoints. When testing from the same machine, the local option measures loopback throughput **not** ISP speed.
 
-> **Measurement caveat:** Results are browser-level estimates influenced by browser, device, load, server, network path and external-service availability. Failed HTTP probes are not the same thing as true IP packet loss; the "packet loss" display represents failed application-layer samples. Browser Fetch does not expose precise upload byte progress; SpeedPulse now reports an upload result only after the server confirms success.
+> **Measurement caveat:** Results are browser-level estimates influenced by browser, device, load, server, network path and external-service availability. Failed HTTP probes are not the same thing as true IP packet loss; the "packet loss" display represents failed application-layer samples. Browser Fetch does not expose precise upload byte progress; SpeedPulse reports an upload result only after the server confirms success. In local ASP.NET mode, the frontend also verifies the server's acknowledged byte count before displaying a result.
 
 ## Try it
 
@@ -87,7 +87,9 @@ The build writes browser bundles to `main-files/`. Run `dotnet build -c Release`
 | GET or HEAD | `/api/down?bytes=26214400` | Uncached download or bodyless ping probe; 0–64 MiB allowed, 25 MiB default |
 | POST | `/api/up` | Measures received upload bytes; request body capped at 8 MiB |
 
-Measurement endpoints have per-IP fixed-window rate limiting (60 requests/minute per running server instance) and report invalid download sizes with HTTP 400, oversized uploads with HTTP 413, and excess requests with HTTP 429.
+Measurement endpoints have per-IP fixed-window rate limiting (60 requests/minute by default) and a **global concurrency cap** (4 active upload/download bodies by default, configurable from 1 to 16). Requests above either limit return HTTP 429; saturation includes a `Retry-After: 2` header. Invalid download sizes return HTTP 400, and oversized uploads return HTTP 413. HEAD and zero-byte latency probes do not occupy concurrency slots but still count toward the per-IP request limit.
+
+To reduce simultaneous transfers in a trusted LAN deployment, set `SpeedPulse__MaxConcurrentTransfers=2` before starting the .NET server. `GET /api/config` reports the effective cap and `GET /api/health` reports the current `activeTransfers`. See [the API reference](./docs/api/endpoints.md) for details.
 
 **Hosting security:** The backend is designed primarily for local or trusted-LAN use. CORS is not opened to arbitrary websites, but rate limiting is not a substitute for authentication, access controls, bandwidth quotas or network-level protections when hosting publicly. A local test from the same machine measures loopback throughput, **not** your ISP download speed.
 
