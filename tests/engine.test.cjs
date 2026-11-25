@@ -85,9 +85,9 @@ test('Cloudflare upload includes the requested payload byte count', async () => 
 test('self-hosted upload does not append Cloudflare-specific parameters', async () => {
   const engine = await enginePromise;
   const previousFetch = global.fetch;
-  global.fetch = async (url) => {
+  global.fetch = async (url, init) => {
     assert.equal(url, '/api/up');
-    return { ok: true, status: 200 };
+    return { ok: true, status: 200, json: async () => ({ bytesReceived: init.body.size }) };
   };
   try {
     await engine.runUploadTest('local', () => {});
@@ -293,4 +293,98 @@ test('the dashboard source uses fractional downloaded bytes for its progress bar
   const script = fs.readFileSync(path.join(__dirname, '..', 'src', 'script.ts'), 'utf8');
   assert.match(script, /completedFraction/);
   assert.match(script, /progDown\.style\.width/);
+});
+
+test('self-hosted upload rejects a wrong byte count without reporting progress', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  let progress = 0;
+  global.fetch = async (_url, init) => ({
+    ok: true, status: 200, json: async () => ({ bytesReceived: init.body.size - 1 }),
+  });
+  try {
+    await assert.rejects(engine.runUploadTest('local', () => { progress++; }, 1024),
+      /Upload verification failed/);
+    assert.equal(progress, 0);
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('self-hosted upload rejects malformed acknowledgements', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  try {
+    for (const acknowledgement of [null, {}, { bytesReceived: '1024' }]) {
+      global.fetch = async () => ({
+        ok: true, status: 200, json: async () => acknowledgement,
+      });
+      await assert.rejects(engine.runUploadTest('local', () => {}, 1024),
+        /Upload verification failed/);
+    }
+    global.fetch = async () => ({
+      ok: true, status: 200, json: async () => { throw new SyntaxError('bad JSON'); },
+    });
+    await assert.rejects(engine.runUploadTest('local', () => {}, 1024),
+      /invalid backend acknowledgement/);
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('oversized download cancels on the first extra chunk without false progress', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  let reads = 0;
+  let cancellations = 0;
+  const fractions = [];
+  global.fetch = async () => ({
+    ok: true,
+    body: { getReader: () => ({
+      read: async () => {
+        reads++;
+        return { done: false, value: new Uint8Array(2048) };
+      },
+      cancel: async () => { cancellations++; },
+    }) },
+  });
+  try {
+    await assert.rejects(engine.runDownloadTest('local',
+      (_speed, fraction) => fractions.push(fraction), 1024),
+      /Download exceeded requested size/);
+    assert.equal(reads, 1);
+    assert.equal(cancellations, 1);
+    assert.deepEqual(fractions, []);
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('Stop explicitly cancels a stalled download response reader', async () => {
+  const engine = await enginePromise;
+  const original = global.fetch;
+  let cancellations = 0;
+  global.fetch = async () => ({
+    ok: true,
+    body: { getReader: () => ({
+      read: () => new Promise(() => {}),
+      cancel: async () => { cancellations++; },
+    }) },
+  });
+  try {
+    const pending = engine.runDownloadTest('local', () => {}, 1024, 30_000);
+    await new Promise(resolve => setImmediate(resolve));
+    engine.abortTest();
+    await assert.rejects(pending, { name: 'AbortError' });
+    assert.equal(cancellations, 1);
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('deployed bundle contains the transfer-integrity checks', () => {
+  const compiled = fs.readFileSync(path.join(__dirname, '..', 'main-files', 'bundle.js'), 'utf8');
+  assert.match(compiled, /Upload verification failed: backend did not confirm/);
+  assert.match(compiled, /Download exceeded requested size: expected/);
+  assert.match(compiled, /signal.addEventListener\("abort", cancelReader/);
 });

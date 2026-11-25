@@ -45,3 +45,30 @@ test('browser script contains real latency data and HTTPS location fallback', ()
   assert.doesNotMatch(js, /http:\/\/ip-api\.com/);
   assert.match(js, /https:\/\/ipwho\.is\//);
 });
+
+test('history UI and compiled dashboard identify measurement endpoints', () => {
+  assert.match(read('index.html'), /<th>Endpoint<\/th>/);
+  const js = read('bundle.js');
+  assert.match(js, /Unknown \(legacy\)/);
+  assert.match(js, /not a general Internet speed grade/);
+  assert.match(js, /Not directly comparable: endpoint or data budget differs/);
+});
+
+test('partial history comparisons display unavailable values, not NaN or undefined', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src/script.ts'), 'utf8');
+  assert.match(source, /function displayComparisonMetric/);
+  assert.match(source, /'Unavailable'/);
+  assert.doesNotMatch(source, /res1\.upload\?\.toFixed/);
+  assert.doesNotMatch(source, /Math\.round\(res2\.ping\)/);
+  assert.match(read('bundle.js'), /function displayComparisonMetric/);
+});
+
+test('shareable gauge capture contains the endpoint provenance label', () => {
+  const html = read('index.html');
+  assert.match(html, /id="capture-area"/);
+  assert.match(html, /id="measurement-source-note"/);
+  assert.ok(html.indexOf('id="measurement-source-note"') > html.indexOf('id="capture-area"'));
+  assert.ok(html.indexOf('id="measurement-source-note"') < html.indexOf('id="share-btn"'));
+  assert.match(read('bundle.js'), /Local ASP.NET server — measuring the path to this host/);
+  assert.match(read('styles.css'), /\.measurement-source-note/);
+});

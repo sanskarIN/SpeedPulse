@@ -273,6 +273,9 @@
     return values.every(valid) ? passes() ? "pass" : "fail" : "unknown";
   }
   function calculateReadiness(metrics) {
+    if (metrics.server === "local") {
+      return { streaming4K: "unknown", videoCalls: "unknown", gaming: "unknown", largeUploads: "unknown" };
+    }
     const { download: download2, upload: upload2, ping, jitter } = metrics;
     return {
       streaming4K: check([download2], () => download2 > 25),
@@ -376,6 +379,8 @@
     if (/HTTP 429\b/.test(message)) return "The test endpoint is rate-limiting requests (HTTP 429). Try again later.";
     if (/HTTP 413\b/.test(message)) return "The selected payload exceeds the server limit (HTTP 413). Try Quick mode.";
     if (/HTTP 5\d\d\b/.test(message)) return `${stage} failed because the server returned an error. Try again later.`;
+    if (/Upload verification failed/.test(message)) return "Upload could not be verified: the local server did not confirm the expected bytes.";
+    if (/Download exceeded requested size/.test(message)) return "Download exceeded your selected data budget and was stopped.";
     if (error instanceof TypeError) return `${stage} could not reach the ${server === "local" ? "ASP.NET Core" : "Cloudflare"} endpoint. Check connectivity or browser restrictions.`;
     return `${stage} could not be measured. Check the selected server and retry.`;
   }
@@ -435,20 +440,33 @@
       if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`);
       if (!response.body) throw new Error("Streaming download unavailable");
       const reader = response.body.getReader();
+      const cancelReader = () => {
+        try {
+          void reader.cancel().catch(() => {
+          });
+        } catch {
+        }
+      };
+      signal.addEventListener("abort", cancelReader, { once: true });
+      let streamComplete = false;
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (signal.aborted) throw cancelled();
-          if (done) break;
+          if (done) {
+            streamComplete = true;
+            break;
+          }
           received += value.byteLength;
+          if (received > bytes) {
+            throw new Error(`Download exceeded requested size: expected ${bytes} bytes, received at least ${received}`);
+          }
           const seconds2 = (performance.now() - start) / 1e3;
-          if (seconds2 > 0.1) safeProgress(onProgress, received * 8 / 1e6 / seconds2, signal, Math.min(1, received / bytes));
+          if (seconds2 > 0.1) safeProgress(onProgress, received * 8 / 1e6 / seconds2, signal, received / bytes);
         }
       } finally {
-        if (signal.aborted) {
-          void reader.cancel().catch(() => {
-          });
-        }
+        signal.removeEventListener("abort", cancelReader);
+        if (!streamComplete) cancelReader();
       }
       if (received !== bytes) {
         throw new Error(`Incomplete download: expected ${bytes} bytes, received ${received}`);
@@ -477,8 +495,20 @@
         mode: "cors",
         signal
       });
+      const responseTime = performance.now();
       if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
-      const seconds = (performance.now() - start) / 1e3;
+      if (server === "local") {
+        let acknowledgement;
+        try {
+          acknowledgement = await response.json();
+        } catch {
+          throw new Error("Upload verification failed: invalid backend acknowledgement");
+        }
+        if (!acknowledgement || typeof acknowledgement !== "object" || !("bytesReceived" in acknowledgement) || acknowledgement.bytesReceived !== bytes) {
+          throw new Error(`Upload verification failed: backend did not confirm ${bytes} bytes`);
+        }
+      }
+      const seconds = (responseTime - start) / 1e3;
       const measured = seconds > 0 ? bytes * 8 / 1e6 / seconds : 0;
       safeProgress(onProgress, measured, signal);
       return measured;
@@ -575,6 +605,14 @@
   function cleanNumber(value) {
     return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : void 0;
   }
+  function cleanTransferBytes(value, maximum) {
+    return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= maximum ? value : void 0;
+  }
+  function endpointLabel(server) {
+    if (server === "cloudflare") return "Cloudflare CDN";
+    if (server === "local") return "Local ASP.NET";
+    return "Unknown (legacy)";
+  }
   function cleanEntry(input) {
     if (!input || typeof input !== "object") return null;
     const item = input;
@@ -586,6 +624,9 @@
       date: item.date,
       isp: typeof item.isp === "string" ? item.isp.slice(0, 200) : "Unknown",
       profile: ["quick", "standard", "thorough"].includes(String(item.profile)) ? String(item.profile) : void 0,
+      server: item.server === "cloudflare" || item.server === "local" ? item.server : void 0,
+      downloadBytes: cleanTransferBytes(item.downloadBytes, 64 * 1024 * 1024),
+      uploadBytes: cleanTransferBytes(item.uploadBytes, 8 * 1024 * 1024),
       download: cleanNumber(item.download),
       upload: cleanNumber(item.upload),
       ping: cleanNumber(item.ping),
@@ -618,6 +659,13 @@
     }
     return history;
   }
+  function areResultsComparable(a, b) {
+    return (a.server === "cloudflare" || a.server === "local") && a.server === b.server && ["quick", "standard", "thorough"].includes(a.profile ?? "") && a.profile === b.profile && cleanTransferBytes(a.downloadBytes, 64 * 1024 * 1024) !== void 0 && a.downloadBytes === b.downloadBytes && cleanTransferBytes(a.uploadBytes, 8 * 1024 * 1024) !== void 0 && a.uploadBytes === b.uploadBytes;
+  }
+  function previousComparableBest(entries, candidate) {
+    const prior = entries.filter((entry) => areResultsComparable(entry, candidate) && typeof entry.download === "number" && Number.isFinite(entry.download));
+    return prior.length ? Math.max(...prior.map((entry) => entry.download)) : null;
+  }
   function clearHistory() {
     try {
       localStorage.removeItem(STORAGE_KEY2);
@@ -641,6 +689,9 @@
       "Jitter (ms)",
       "ISP",
       "Profile",
+      "Server",
+      "Download bytes",
+      "Upload bytes",
       "Status"
     ];
     const rows = history.map((item) => [
@@ -651,6 +702,9 @@
       item.jitter?.toFixed(0) ?? "",
       item.isp ?? "Unknown",
       item.profile ?? "legacy",
+      endpointLabel(item.server),
+      item.downloadBytes ?? "",
+      item.uploadBytes ?? "",
       item.upload == null ? "Partial" : "Complete"
     ]);
     const csvContent = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
@@ -694,6 +748,7 @@
       var valUp = document.getElementById("val-up");
       var progDown = document.getElementById("prog-down");
       var downloadProgressLabel = document.getElementById("download-progress-label");
+      var measurementSourceNote = document.getElementById("measurement-source-note");
       var progUp = document.getElementById("prog-up");
       var isTesting = false;
       var testGeneration = 0;
@@ -744,11 +799,18 @@
           console.warn("Audio notification skipped:", error);
         }
         const server = document.getElementById("server-select").value;
+        if (measurementSourceNote) measurementSourceNote.textContent = server === "local" ? "Local ASP.NET server — measuring the path to this host (which may be LAN or loopback), not general ISP speed." : "Cloudflare CDN — public Internet path (browser-level estimate).";
         const profile = getTestProfile(document.getElementById("test-profile-select").value);
         const serverLimits = server === "local" ? window.speedpulseServerLimits : null;
         const budget = effectiveTestBudget(profile, serverLimits);
         let activeStage = "ping";
-        const finalResult = { isp: document.getElementById("info-isp").textContent, profile: profile.id };
+        const finalResult = {
+          isp: document.getElementById("info-isp").textContent,
+          profile: profile.id,
+          server,
+          downloadBytes: budget.downloadBytes,
+          uploadBytes: budget.uploadBytes
+        };
         try {
           setGaugePhase("Finding Optimal Server...");
           gaugeSpeed.textContent = "...";
@@ -817,39 +879,33 @@
           ensureActive();
           setGaugePhase("Finished");
           updateGauge(finalDown);
-          const gradeObj = uploadError ? {
+          const gradeObj = server === "local" ? {
+            grade: "-",
+            text: "Local ASP.NET measurement to this server; not a general Internet speed grade." + (uploadError ? " Upload unavailable. " + uploadError : "")
+          } : uploadError ? {
             grade: "-",
             text: "Partial result: download and ping measured; upload unavailable. " + uploadError
           } : calculateGrade(finalDown, finalUp, ping);
           document.getElementById("overall-grade").textContent = gradeObj.grade;
           document.getElementById("grade-desc").textContent = gradeObj.text;
           const indicators = document.querySelectorAll(".status-indicator");
-          const readiness = calculateReadiness({ download: finalDown, upload: finalUp, ping, jitter });
+          const readiness = calculateReadiness({ download: finalDown, upload: finalUp, ping, jitter, server });
           READINESS_ORDER.forEach((key, index) => {
             const indicator = indicators[index];
             if (!indicator) return;
             const status = readiness[key];
             indicator.className = "status-indicator" + (status === "unknown" ? "" : " status-" + status);
-            indicator.setAttribute("aria-label", status === "unknown" ? "Not enough measured data" : status === "pass" ? "Likely suitable" : "May be unsuitable");
+            indicator.setAttribute("aria-label", status === "unknown" ? server === "local" ? "Internet suitability not assessed by local test" : "Not enough measured data" : status === "pass" ? "Likely suitable" : "May be unsuitable");
           });
-          saveResult(finalResult);
+          const updatedHistory = saveResult(finalResult);
           renderHistory();
           try {
             playSound("finish");
           } catch (error) {
             console.warn("Audio notification skipped:", error);
           }
-          const history = getHistory();
-          if (history.length > 1) {
-            const previousBest = Math.max(...history.slice(1).map((h) => h.download || 0));
-            if (finalDown > previousBest) {
-              try {
-                fireConfetti();
-              } catch (error) {
-                console.warn("Celebration animation skipped:", error);
-              }
-            }
-          } else if (finalDown > 100) {
+          const previousBest = previousComparableBest(updatedHistory.slice(1), finalResult);
+          if (previousBest !== null && finalDown > previousBest) {
             try {
               fireConfetti();
             } catch (error) {
@@ -933,7 +989,7 @@
         const tbody = document.getElementById("history-body");
         tbody.innerHTML = "";
         if (history.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No tests run yet.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">No tests run yet.</td></tr>';
           return;
         }
         history.forEach((item, index) => {
@@ -954,7 +1010,9 @@
           tdPing.textContent = Number.isFinite(item.ping) ? Math.round(item.ping) + " ms" : "--";
           const tdISP = document.createElement("td");
           tdISP.textContent = item.isp || "Unknown";
-          tr.append(tdCheck, tdDate, tdDown, tdUp, tdPing, tdISP);
+          const tdServer = document.createElement("td");
+          tdServer.textContent = endpointLabel(item.server);
+          tr.append(tdCheck, tdDate, tdDown, tdUp, tdPing, tdISP, tdServer);
           tbody.appendChild(tr);
         });
       }
@@ -1123,6 +1181,9 @@
           shareBtn.textContent = "Share Result";
         }
       }
+      function displayComparisonMetric(value, digits, unit) {
+        return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) + " " + unit : "Unavailable";
+      }
       function compareResults() {
         const checked = Array.from(document.querySelectorAll(".history-checkbox:checked"));
         if (checked.length !== 2) {
@@ -1134,20 +1195,24 @@
         const res2 = history[checked[1].value];
         const modal = document.getElementById("compare-modal");
         const grid = document.getElementById("compare-grid");
+        const comparisonWarning = areResultsComparable(res1, res2) ? "" : '<p role="status">Not directly comparable: endpoint or data budget differs, or one result predates endpoint tracking. Values are shown for reference only.</p>';
         grid.innerHTML = `
+        ${comparisonWarning}
         <div class="glass-panel" style="background:var(--hover-bg)">
             <h3>Result 1</h3>
+            <p><strong>Endpoint:</strong> ${endpointLabel(res1.server)}</p>
             <p><strong>Date:</strong> ${new Date(res1.date).toLocaleDateString()}</p>
-            <p><strong>Download:</strong> ${res1.download?.toFixed(2)} Mbps</p>
-            <p><strong>Upload:</strong> ${res1.upload?.toFixed(2)} Mbps</p>
-            <p><strong>Ping:</strong> ${Math.round(res1.ping)} ms</p>
+            <p><strong>Download:</strong> ${displayComparisonMetric(res1.download, 2, "Mbps")}</p>
+            <p><strong>Upload:</strong> ${displayComparisonMetric(res1.upload, 2, "Mbps")}</p>
+            <p><strong>Ping:</strong> ${displayComparisonMetric(res1.ping, 0, "ms")}</p>
         </div>
         <div class="glass-panel" style="background:var(--hover-bg)">
             <h3>Result 2</h3>
+            <p><strong>Endpoint:</strong> ${endpointLabel(res2.server)}</p>
             <p><strong>Date:</strong> ${new Date(res2.date).toLocaleDateString()}</p>
-            <p><strong>Download:</strong> ${res2.download?.toFixed(2)} Mbps</p>
-            <p><strong>Upload:</strong> ${res2.upload?.toFixed(2)} Mbps</p>
-            <p><strong>Ping:</strong> ${Math.round(res2.ping)} ms</p>
+            <p><strong>Download:</strong> ${displayComparisonMetric(res2.download, 2, "Mbps")}</p>
+            <p><strong>Upload:</strong> ${displayComparisonMetric(res2.upload, 2, "Mbps")}</p>
+            <p><strong>Ping:</strong> ${displayComparisonMetric(res2.ping, 0, "ms")}</p>
         </div>
     `;
         modal.classList.remove("hidden");
@@ -1157,9 +1222,15 @@
           const history = getHistory();
           if (history.length > 0) {
             const last = history[0];
-            valDown.textContent = formatSpeed(last.download, document.getElementById("unit-select").value);
-            valUp.textContent = Number.isFinite(last.upload) ? formatSpeed(last.upload, document.getElementById("unit-select").value) : "--";
-            updateGauge(last.download);
+            const unit = document.getElementById("unit-select").value;
+            if (typeof last.download === "number" && Number.isFinite(last.download)) {
+              valDown.textContent = formatSpeed(last.download, unit);
+              updateGauge(last.download);
+            } else {
+              valDown.textContent = "--";
+              updateGauge(0);
+            }
+            valUp.textContent = typeof last.upload === "number" && Number.isFinite(last.upload) ? formatSpeed(last.upload, unit) : "--";
           }
         }
         document.querySelectorAll(".unit-label").forEach((el) => el.textContent = document.getElementById("unit-select").value);

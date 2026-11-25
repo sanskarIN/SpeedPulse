@@ -22,6 +22,10 @@ var maxDownloadBytes = Math.Clamp(configured.MaxDownloadBytes, mib, 64 * mib);
 var maxUploadBytes = Math.Clamp(configured.MaxUploadBytes, mib, 8 * mib);
 var defaultDownloadBytes = Math.Min(25 * mib, maxDownloadBytes);
 var rateLimitRequestsPerMinute = Math.Clamp(configured.RateLimitRequestsPerMinute, 10, 120);
+var maxConcurrentTransfers = Math.Clamp(configured.MaxConcurrentTransfers, 1, 16);
+// One cap shared by all clients. Unlike per-IP request limits, this bounds
+// simultaneous bodies and avoids allocating download buffers while saturated.
+var transferGate = new TransferGate(maxConcurrentTransfers);
 
 // No wildcard CORS: the web UI and /api routes share an origin in self-hosted mode.
 // This is a demo test server: use access controls when exposing it beyond a trusted LAN.
@@ -59,7 +63,8 @@ app.MapGet("/api/health", (HttpContext context) =>
         status = "ok",
         service = "SpeedPulseBackend",
         version = "1.0.0",
-        mode = "self-hosted"
+        mode = "self-hosted",
+        activeTransfers = transferGate.ActiveCount
     });
 });
 
@@ -72,6 +77,7 @@ app.MapGet("/api/config", (HttpContext context) =>
         maxDownloadBytes,
         maxUploadBytes,
         rateLimitRequestsPerMinute,
+        maxConcurrentTransfers,
         profiles = new[]
         {
             new { id = "quick", downloadBytes = Math.Min(5 * mib, maxDownloadBytes),
@@ -102,14 +108,28 @@ app.MapMethods("/api/down", new[] { "GET", "HEAD" }, async (HttpContext context)
         }
     }
 
+    // HEAD and zero-byte latency probes do not consume a transfer slot.
+    // They remain subject to the existing per-IP request rate limiter.
+    if (HttpMethods.IsHead(context.Request.Method) || bytes == 0)
+    {
+        context.Response.ContentType = "application/octet-stream";
+        context.Response.ContentLength = bytes;
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return Results.Empty;
+    }
+
+    // Acquire before allocating random buffers or sending response headers.
+    // Saturation is signaled immediately, never queued behind large transfers.
+    using var lease = transferGate.TryAcquire();
+    if (lease is null)
+    {
+        context.Response.Headers.RetryAfter = "2";
+        return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+    }
+
     context.Response.ContentType = "application/octet-stream";
     context.Response.ContentLength = bytes;
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-
-    // A HEAD probe returns the same headers, without transferring a payload.
-    if (HttpMethods.IsHead(context.Request.Method) || bytes == 0)
-        return Results.Empty;
-
     var buffer = new byte[mib];
     RandomNumberGenerator.Fill(buffer);
 
@@ -137,6 +157,13 @@ app.MapPost("/api/up", async (HttpContext context) =>
     SetNoStore(context.Response);
     if (context.Request.ContentLength is long declaredLength && declaredLength > maxUploadBytes)
         return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+
+    using var lease = transferGate.TryAcquire();
+    if (lease is null)
+    {
+        context.Response.Headers.RetryAfter = "2";
+        return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+    }
 
     var buffer = new byte[64 * 1024];
     long received = 0;
